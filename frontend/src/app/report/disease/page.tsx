@@ -290,11 +290,23 @@ export default function DiseaseReportPage() {
   useEffect(() => {
     if (!input) return;
     setPageLoading(true);
+    const cached = localStorage.getItem("irisDetectionReport");
+    if (cached) {
+      try {
+        const r = JSON.parse(cached) as DetectionReport;
+        setReport(r);
+        setNarrationLines(buildNarrationScript(input, r));
+        setPageLoading(false);
+        setShowNarrationPrompt(true);
+        return;
+      } catch { /* fall through to regenerate */ }
+    }
     generateDetectionReport(input).then(r => {
       setReport(r);
       setNarrationLines(buildNarrationScript(input, r));
       setPageLoading(false);
       setShowNarrationPrompt(true);
+      try { localStorage.setItem("irisDetectionReport", JSON.stringify(r)); } catch {}
     });
   }, [input]);
 

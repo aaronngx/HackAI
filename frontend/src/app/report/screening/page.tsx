@@ -424,16 +424,26 @@ export default function ReportPage() {
     localStorage.setItem("irisLastScanDate", Date.now().toString());
   }, []);
 
-  // 2. Generate report via Gemini
+  // 2. Load cached report or generate via Gemini
   useEffect(() => {
     if (!input) return;
     setPageLoading(true);
+    const cached = localStorage.getItem("irisExamReport");
+    if (cached) {
+      try {
+        const r = JSON.parse(cached) as ExamReport;
+        setReport(r);
+        setNarrationLines(buildNarrationScript(r, input));
+        setPageLoading(false);
+        setShowNarrationPrompt(true);
+        return;
+      } catch { /* fall through to regenerate */ }
+    }
     generateReport(input).then(r => {
       setReport(r);
       setNarrationLines(buildNarrationScript(r, input));
       setPageLoading(false);
       setShowNarrationPrompt(true);
-      // Persist for care plan page
       try { localStorage.setItem("irisExamReport", JSON.stringify(r)); } catch {}
     });
   }, [input]);
