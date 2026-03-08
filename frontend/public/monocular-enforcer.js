@@ -23,7 +23,7 @@ export class MonocularEnforcer {
     const covered   = targetEye === 'left' ? coverState.left : coverState.right;
     const ear       = targetEye === 'left' ? earLeft : earRight;
     // Covered = hand detected over eye OR EAR very low (eye physically closed/blocked)
-    const confirmed = !!covered || ear < 0.12;
+    const confirmed = !!covered || ear < 0.15;
 
     if (confirmed) {
       if (!this._coverStart) this._coverStart = performance.now();

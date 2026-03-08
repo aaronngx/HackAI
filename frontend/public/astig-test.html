@@ -181,33 +181,37 @@
     <div class="btn-row">
       <button class="btn btn-green" id="btn-axis-start">Begin →</button>
     </div>
-    <p class="note">~20 comparisons · Keep your head still · Lines will appear in blue</p>
+    <p class="note">~6 comparisons · Keep your head still · Lines will appear in blue</p>
   </div>
 
   <!-- ═══ OVERLAY: MDSF intro ═══ -->
   <div class="ov hidden" id="ov-mdsf-intro">
-    <h2 id="mdsf-intro-title">Step 2 — Resolution Test</h2>
-    <p id="mdsf-intro-body">Fine lines will appear on the <strong>LEFT</strong> or <strong>RIGHT</strong> side.<br>
-       Press <strong>← Left</strong> or <strong>→ Right</strong> to say which side you saw them on.<br>
-       Lines get finer as you do well — keep going as long as you can!</p>
+    <h2>Step 2 — Resolution Test</h2>
+    <p>Fine lines will appear on the <strong>LEFT</strong> or <strong>RIGHT</strong> side.<br>
+       Press <strong>← Left</strong> or <strong>→ Right</strong> (or tap the buttons) to say which side.<br>
+       The test alternates between two orientations — just say where you see lines.</p>
     <div class="btn-row">
       <button class="btn btn-green" id="btn-mdsf-start">Begin →</button>
     </div>
-    <p class="note" id="mdsf-intro-note">Meridian: —</p>
+    <p class="note">10 trials total · Both meridians interleaved · ~21 seconds</p>
   </div>
 
   <!-- ═══ OVERLAY: Far-point walk-back ═══ -->
   <div class="ov hidden" id="ov-farpoint">
-    <h2 id="fp-title">Step 4 — Far Point (Meridian 1)</h2>
-    <p>Sit <strong>close to the screen (~30 cm)</strong> so the lines on screen are clearly visible.<br>
+    <h2 id="fp-title">Step 3 — Far Point (Meridian 1)</h2>
+    <p>Sit <strong>close to the screen (~30 cm)</strong> so the lines are clearly visible.<br>
        Then <strong>slowly lean back</strong> until the lines blur or disappear.<br>
-       Press the button (or <kbd>Space</kbd>) the <em>moment</em> you lose them.</p>
+       <strong>Hold still</strong> at that distance — it will auto-capture.</p>
     <div id="fp-dist"   style="font-size:34px;font-weight:900;color:#00FF88;letter-spacing:2px;">— cm</div>
     <div id="fp-cpd"    style="font-size:12px;color:#555;">— CPD at this distance</div>
     <div id="fp-status" style="font-size:14px;color:#aaa;margin-top:4px;">Move back slowly…</div>
+    <!-- Hold progress bar -->
+    <div id="fp-hold-wrap" style="width:260px;height:8px;background:#222;border-radius:4px;overflow:hidden;display:none;margin-top:8px;">
+      <div id="fp-hold-bar" style="height:100%;background:#00FF88;width:0%;transition:width .05s;"></div>
+    </div>
+    <div id="fp-hold-label" style="font-size:11px;color:#555;margin-top:4px;display:none;">Hold still to capture…</div>
     <div class="btn-row" style="margin-top:12px;">
-      <button class="btn btn-green" id="btn-fp-capture">Lines gone — capture</button>
-      <button class="btn btn-gray"  id="btn-fp-skip">Cannot tell (skip)</button>
+      <button class="btn btn-gray" id="btn-fp-skip">Cannot tell (skip)</button>
     </div>
     <p class="note" style="margin-top:8px;">Keep your <span id="fp-eye">right</span> eye covered throughout.</p>
   </div>
@@ -249,7 +253,14 @@
           <tr><td>FP1</td>  <td id="r-fp1">—</td></tr>
           <tr><td>FP2</td>  <td id="r-fp2">—</td></tr>
         </tbody></table>
+        <div id="r-severity" style="margin-top:6px;font-size:11px;color:#FFD700;"></div>
       </div>
+    </div>
+
+    <!-- Retest banner -->
+    <div id="r-retest" style="display:none;background:rgba(255,68,68,0.12);border:1px solid #FF4444;
+      border-radius:8px;padding:10px 16px;margin-top:8px;max-width:480px;text-align:center;">
+      <div style="color:#FF4444;font-size:13px;font-weight:700;" id="r-retest-msg"></div>
     </div>
 
     <!-- Previous eye (shown after 2nd eye done) -->
@@ -349,13 +360,13 @@
 <script type="module">
 // ─── Imports ─────────────────────────────────────────────────────────────────
 import { DisplayCalibrator, CARD_W_MM, CARD_H_MM } from '/display-calibrator.js';
-import { DistanceSmoother }   from '/distance-smoother.js';
-import { StimulusRenderer }   from '/stimulus-renderer.js';
-import { MonocularEnforcer }  from '/monocular-enforcer.js';
-import { AxisSearchEngine }   from '/axis-search-engine.js';
-import { StaircaseEngine }    from '/staircase-engine.js';
-import { FarPointCapture }    from '/far-point-capture.js';
-import { ConfidenceReporter } from '/confidence-reporter.js';
+import { DistanceSmoother }    from '/distance-smoother.js';
+import { StimulusRenderer }    from '/stimulus-renderer.js';
+import { MonocularEnforcer }   from '/monocular-enforcer.js';
+import { FastAxisEngine }      from '/fast-axis-engine.js';
+import { InterleavedStaircase } from '/staircase-engine.js';
+import { FarPointCapture, HoldCapture } from '/far-point-capture.js';
+import { ConfidenceReporter }  from '/confidence-reporter.js';
 import { computePD, computeEAR, R_EAR_IDX, L_EAR_IDX } from '/face-eye-tracker.js';
 
 // ─── Constants ───────────────────────────────────────────────────────────────
@@ -366,17 +377,17 @@ const HAND_MODEL  = 'https://storage.googleapis.com/mediapipe-models/hand_landma
 fetch(FACE_MODEL).catch(() => {});
 fetch(HAND_MODEL).catch(() => {});
 
-const AXIS_CPD      = 3.0;   // CPD for axis comparison stimuli
-const AXIS_DUR_MS   = 800;   // each interval duration
-const AXIS_ISI_MS   = 200;   // blank between intervals
-const AXIS_READY_MS = 600;   // "GET READY" pause
+const AXIS_CPD      = 3.0;   // CPD for axis tripole stimuli
+const AXIS_DUR_MS   = 700;   // each interval duration
+const AXIS_ISI_MS   = 150;   // blank between intervals
+const AXIS_READY_MS = 400;   // "GET READY" pause
 
-const MDSF_DUR_MS     = 800;   // grating display duration (longer = more visible)
-const MDSF_ISI_MS     = 400;   // fixation before trial
-const MDSF_FB_MS      = 350;   // feedback flash duration
+const MDSF_DUR_MS     = 700;   // grating display duration
+const MDSF_ISI_MS     = 300;   // fixation before trial
+const MDSF_FB_MS      = 300;   // feedback flash duration
 const MDSF_TIMEOUT_MS = 6000;  // auto-advance if no response
 
-const FP_GRATING_PX  = 3;   // fixed pixel period for far-point grating
+const FP_HOLD_MS     = 1500; // ms to hold still for auto-capture
 const HEAD_GATE_MS   = 1000; // ms of face-loss before pausing trial
 
 // ─── DOM helpers ─────────────────────────────────────────────────────────────
@@ -392,7 +403,7 @@ const setDv  = (id, text, cls = '') => {
 // ─── Module instances ────────────────────────────────────────────────────────
 const calibrator = new DisplayCalibrator();
 const smoother   = new DistanceSmoother({ cameraOffsetMm: 25 });
-const enforcer   = new MonocularEnforcer({ sustainMs: 600 });
+const enforcer   = new MonocularEnforcer({ sustainMs: 400 });
 const reporter   = new ConfidenceReporter();
 let   renderer   = null;
 
@@ -412,21 +423,22 @@ let axisEngine = null;
 let axisPair   = null;
 let axisStep   = 0;   // 0=queue-next 1=ready 2=showA 3=isi 4=showB/wait
 let foundAxis  = null;
+let axisConf   = 0;   // 0 | 0.5 | 1.0
 
-// MDSF staircases
-let staircase1  = null;  // along found axis
-let staircase2  = null;  // perpendicular
-let currentSC   = null;
-let mdsf1Axis   = 0;
-let mdsf2Axis   = 90;
-let mdsfSide    = 'left';
+// MDSF — interleaved dual-meridian staircase
+let interleavedSC   = null;
+let mdsf1Axis       = 0;
+let mdsf2Axis       = 90;
+let mdsfSide        = 'left';
+let curMeridianTrial = null; // { meridian, axis, cpd } from interleavedSC.nextTrial()
 
 // Far-point capture
-let fpCapture1  = null;
-let fpCapture2  = null;
-let fp1ResultMm = null;
-let fp2ResultMm = null;
-let fpMeridian  = 1;
+let holdCapture1 = null;
+let holdCapture2 = null;
+let fp1ResultMm  = null;
+let fp2ResultMm  = null;
+let fpMeridian   = 1;
+let fpTargetCPD  = 3; // spatial frequency for far-point grating
 
 // Head-gating
 let headLostT    = null;
@@ -607,8 +619,9 @@ D('btn-mono-skip').onclick    = () => beginAxisSearch();
 
 // ─── Axis search ─────────────────────────────────────────────────────────────
 function beginAxisSearch() {
-  axisEngine = new AxisSearchEngine();
+  axisEngine = new FastAxisEngine();
   foundAxis  = null;
+  axisConf   = 0;
   axisStep   = 0;
   hideAllOv(); showOv('ov-axis-intro');
   setState('AXIS_INTRO');
@@ -624,65 +637,62 @@ function startNextAxisPair() {
   stimStateT = performance.now();
   showLabel('GET READY', '#888'); showMsg('');
   const p = axisEngine.getProgress();
-  setProgress(`${p.done + 1} / ${p.total}`);
+  setProgress(`${p.done + 1} / 6`);
   setDv('d-ax-pair', `${axisPair[0]}° vs ${axisPair[1]}°`);
 }
 
 // ─── MDSF ────────────────────────────────────────────────────────────────────
-function beginMDSF(num) {
-  if (num === 1) {
-    mdsf1Axis  = foundAxis ?? 0;
-    mdsf2Axis  = (mdsf1Axis + 90) % 180;
-    staircase1 = new StaircaseEngine({ startCPD: 3, maxCPD: Math.min(20, StimulusRenderer.maxCPD(lastDistMm, calibrator.mmPerPx ?? 0.18)) });
-    currentSC  = staircase1;
-    D('mdsf-intro-title').textContent = 'Step 2 — Resolution Test (Meridian 1)';
-    D('mdsf-intro-note').textContent  = `Meridian: ${mdsf1Axis}° (detected axis)`;
-    setState('MDSF_INTRO_1');
-  } else {
-    staircase2 = new StaircaseEngine({ startCPD: 3, maxCPD: Math.min(20, StimulusRenderer.maxCPD(lastDistMm, calibrator.mmPerPx ?? 0.18)) });
-    currentSC  = staircase2;
-    D('mdsf-intro-title').textContent = 'Step 3 — Resolution Test (Meridian 2)';
-    D('mdsf-intro-note').textContent  = `Meridian: ${mdsf2Axis}° (perpendicular)`;
-    setState('MDSF_INTRO_2');
-  }
+function beginMDSF() {
+  mdsf1Axis = foundAxis ?? 0;
+  mdsf2Axis = (mdsf1Axis + 90) % 180;
+  interleavedSC = new InterleavedStaircase({
+    startCPD: 3,
+    maxTrials: 10,
+    maxCPD: Math.min(20, StimulusRenderer.maxCPD(lastDistMm, calibrator.mmPerPx ?? 0.18)),
+    axis1: mdsf1Axis,
+    axis2: mdsf2Axis,
+  });
   showOv('ov-mdsf-intro');
+  setState('MDSF_INTRO');
 }
 D('btn-mdsf-start').onclick = () => {
   hideAllOv();
-  setState(appState === 'MDSF_INTRO_1' ? 'MDSF_1' : 'MDSF_2');
+  setState('MDSF');
   startMDSFTrial();
 };
 function startMDSFTrial() {
+  curMeridianTrial = interleavedSC.nextTrial(); // { meridian, axis, cpd }
   mdsfSide   = Math.random() < 0.5 ? 'left' : 'right';
   stimState  = 'MDSF_ISI';
   stimStateT = performance.now();
   D('mdsf-btns').style.display = 'none';
   showLabel(''); showMsg('');
-  setProgress(`Rev: ${currentSC.reversalCount}/${currentSC.maxReversals}  Trial: ${currentSC.trialCount}`);
+  setProgress(`Trial: ${interleavedSC.totalTrials + 1} / ${interleavedSC.maxTrialsVal}`);
 }
 
-// ─── Far-point walk-back ──────────────────────────────────────────────────────
+// ─── Far-point walk-back (hold-capture) ───────────────────────────────────────
 function beginFarPoint(num) {
   fpMeridian = num;
-  if (num === 1) fpCapture1 = new FarPointCapture();
-  else           fpCapture2 = new FarPointCapture();
+  if (num === 1) holdCapture1 = new HoldCapture(FP_HOLD_MS);
+  else           holdCapture2 = new HoldCapture(FP_HOLD_MS);
   const axisAngle = num === 1 ? (foundAxis ?? 0) : ((foundAxis ?? 0) + 90) % 180;
-  D('fp-title').textContent  = `Step ${num + 3} — Far Point (Meridian ${num}: ${axisAngle}°)`;
-  D('fp-eye').textContent    = currentEye;
-  D('fp-status').textContent = 'Move back slowly until lines blur…';
-  D('fp-dist').textContent   = '— cm';
-  D('fp-cpd').textContent    = '— CPD';
+  // Target CPD = 65% of MDSF threshold for this meridian
+  const thr = interleavedSC ? interleavedSC.threshold(num - 1) : 3;
+  fpTargetCPD = Math.max(1, thr * 0.65);
+  D('fp-title').textContent   = `Step ${num + 2} — Far Point (Meridian ${num}: ${axisAngle}°)`;
+  D('fp-eye').textContent     = currentEye;
+  D('fp-status').textContent  = 'Move back slowly until lines blur, then hold still…';
+  D('fp-dist').textContent    = '— cm';
+  D('fp-cpd').textContent     = `${fpTargetCPD.toFixed(1)} CPD grating`;
+  D('fp-hold-wrap').style.display  = 'block';
+  D('fp-hold-label').style.display = 'block';
+  D('fp-hold-bar').style.width     = '0%';
   showOv('ov-farpoint');
   setState(num === 1 ? 'FAR_POINT_1' : 'FAR_POINT_2');
   showLabel(''); showMsg('');
 }
-function captureFarPoint() {
-  if (!smoother.isValid() || lastDistMm <= 0) {
-    showMsg('No distance reading — make sure face is visible.', 1500); return;
-  }
-  const cap = fpMeridian === 1 ? fpCapture1 : fpCapture2;
-  const mm  = cap.capture(lastDistMm);
-  const cm  = (mm / 10).toFixed(1);
+function autoCaptureFarPoint(mm) {
+  const cm = (mm / 10).toFixed(1);
   if (fpMeridian === 1) {
     fp1ResultMm = mm;
     showLabel(`FP1: ${cm} cm`, '#00FF88');
@@ -695,8 +705,7 @@ function captureFarPoint() {
     setTimeout(() => { showLabel(''); showResults(); }, 1800);
   }
 }
-D('btn-fp-capture').onclick = captureFarPoint;
-D('btn-fp-skip').onclick    = () => {
+D('btn-fp-skip').onclick = () => {
   if (fpMeridian === 1) {
     fp1ResultMm = null; setState('FAR_POINT_1_DONE');
     setTimeout(() => beginFarPoint(2), 200);
@@ -712,7 +721,7 @@ function handleMDSFResponse(resp) {
   D('mdsf-btns').style.display = 'none';
   reporter.recordResponseMs(performance.now() - stimStateT);
   const correct = resp === mdsfSide;
-  currentSC.trial(correct);
+  interleavedSC.trial(correct);
   stimState  = 'MDSF_FEEDBACK';
   stimStateT = performance.now();
   showLabel(correct ? '✓' : '✗', correct ? '#00FF88' : '#FF4444');
@@ -722,57 +731,66 @@ function handleMDSFResponse(resp) {
 document.addEventListener('keydown', e => {
   // Axis: 1 or 2
   if (appState === 'AXIS' && axisStep === 4 && (e.key === '1' || e.key === '2')) {
-    reporter.recordResponseMs(performance.now() - stimStateT);
-    axisEngine.recordResponse(+e.key);
+    const rt = performance.now() - stimStateT;
+    reporter.recordResponseMs(rt);
+    axisEngine.recordResponse(+e.key, rt);
     if (axisEngine.isDone()) {
       foundAxis = axisEngine.getFinalAxis();
+      axisConf  = axisEngine.getAxisConfidence();
       showLabel(`AXIS: ${foundAxis}°`, '#00FF88');
       showMsg('Axis found! Starting resolution test…', 2000);
       setProgress('');
       setState('AXIS_DONE');
-      setTimeout(() => beginMDSF(1), 2200);
+      setTimeout(() => beginMDSF(), 2200);
     } else {
       axisStep = 0;
     }
   }
 
   // MDSF: ← → or 1/2
-  if ((appState === 'MDSF_1' || appState === 'MDSF_2') && stimState === 'MDSF_RESPONSE') {
+  if (appState === 'MDSF' && stimState === 'MDSF_RESPONSE') {
     let resp = null;
     if (e.key === 'ArrowLeft'  || e.key === '1') resp = 'left';
     if (e.key === 'ArrowRight' || e.key === '2') resp = 'right';
     if (resp) handleMDSFResponse(resp);
-  }
-
-  // Far-point: Space
-  if ((appState === 'FAR_POINT_1' || appState === 'FAR_POINT_2') && e.code === 'Space') {
-    e.preventDefault(); captureFarPoint();
   }
 });
 
 // ─── Results ──────────────────────────────────────────────────────────────────
 function showResults() {
   setState('RESULTS');
-  const t1 = staircase1?.threshold() ?? 0;
-  const t2 = staircase2?.threshold() ?? 0;
-  const s1 = staircase1?.spread()    ?? 0;
-  const s2 = staircase2?.spread()    ?? 0;
-  const q  = reporter.score(s1, s2);
+  const t1 = interleavedSC?.threshold(0) ?? 0;
+  const t2 = interleavedSC?.threshold(1) ?? 0;
+  const s1 = interleavedSC?.spread(0)    ?? 0;
+  const s2 = interleavedSC?.spread(1)    ?? 0;
+  const r0 = interleavedSC?.reversalCount(0) ?? 0;
+  const r1 = interleavedSC?.reversalCount(1) ?? 0;
+  const holdCaptures = (fp1ResultMm ? 1 : 0) + (fp2ResultMm ? 1 : 0);
+
+  const q = reporter.scoreV3({
+    axisConfidence: axisConf,
+    reversals:      [r0, r1],
+    spread:         [s1, s2],
+    holdCaptures,
+    coverOk: true,
+  });
 
   let ref = null;
   if (fp1ResultMm || fp2ResultMm) {
-    ref = FarPointCapture.computeRefraction(fp1ResultMm, fp2ResultMm, foundAxis ?? 0);
+    ref = FarPointCapture.computeRefractionV3(fp1ResultMm, fp2ResultMm, foundAxis ?? 0);
   }
+
+  // Snellen from threshold CPD
+  const toSnellen = cpd => Math.round(600 / Math.max(0.5, cpd));
 
   // The eye that was TESTED = the one NOT covered
   const testedEye = currentEye === 'right' ? 'left' : 'right';
   const eyeData   = {
     coveredEye: currentEye, testedEye,
-    axis:       foundAxis,
-    axisComps:  axisEngine?.getProgress().done,
+    axis: foundAxis, axisConf,
+    protocol: 'v3',
     mdsf1: t1, mdsf2: t2,
-    sn1: StaircaseEngine.toSnellen(t1),
-    sn2: StaircaseEngine.toSnellen(t2),
+    sn1: toSnellen(t1), sn2: toSnellen(t2),
     fp1Mm: fp1ResultMm, fp2Mm: fp2ResultMm,
     refraction: ref, quality: q,
   };
@@ -807,26 +825,44 @@ function showResults() {
 
   // Populate current-eye columns
   const eyeName = testedEye.charAt(0).toUpperCase() + testedEye.slice(1);
+  const confLabel = axisConf >= 1.0 ? 'High' : axisConf >= 0.5 ? 'Medium' : 'Low';
   D('r-title').textContent      = `Results — ${eyeName} Eye`;
   D('r-eye-label').textContent  = `${eyeName.toUpperCase()} EYE`;
   D('r-axis').textContent       = `${foundAxis ?? '?'}°`;
-  D('r-axis-conf').textContent  = (axisEngine?.getProgress().done ?? '?') + ' comparisons';
+  D('r-axis-conf').textContent  = `${confLabel} (${axisConf >= 1.0 ? '3/3' : axisConf >= 0.5 ? '2/3' : '1/3'} wins)`;
   D('r-quality').textContent    = `${q}% (${ConfidenceReporter.label(q)})`;
   D('r-quality').style.color    = q >= 80 ? '#00FF88' : q >= 60 ? '#FFD700' : '#FF4444';
   D('r-mdsf1').textContent      = t1.toFixed(2) + ' CPD';
-  D('r-sn1').textContent        = `20/${StaircaseEngine.toSnellen(t1)}`;
+  D('r-sn1').textContent        = `20/${toSnellen(t1)}`;
   D('r-mdsf2').textContent      = t2.toFixed(2) + ' CPD';
-  D('r-sn2').textContent        = `20/${StaircaseEngine.toSnellen(t2)}`;
+  D('r-sn2').textContent        = `20/${toSnellen(t2)}`;
   if (ref) {
-    D('r-sph').textContent   = `−${ref.sph.toFixed(2)} D`;
-    D('r-cyl').textContent   = `−${ref.cyl.toFixed(2)} D`;
+    // ref.sph and ref.cyl are already signed (≤ 0 for myopia/astigmatism)
+    D('r-sph').textContent   = `${ref.sph.toFixed(2)} D`;
+    D('r-cyl').textContent   = `${ref.cyl.toFixed(2)} D`;
     D('r-raxis').textContent = `${ref.axis}°`;
     D('r-fp1').textContent   = fp1ResultMm ? `${(fp1ResultMm/10).toFixed(1)} cm` : 'skipped';
     D('r-fp2').textContent   = fp2ResultMm ? `${(fp2ResultMm/10).toFixed(1)} cm` : 'skipped';
     D('r-note').textContent  = ref.note;
+    // Severity labels
+    const myoLabel  = ConfidenceReporter.myopiaLabel(ref.sph);
+    const astigLbl  = ConfidenceReporter.astigLabel(ref.cyl);
+    D('r-severity').textContent = `${myoLabel} · ${astigLbl}`;
+    // Method note
+    D('r-note').textContent = `${ref.note} · Tripole axis search, grating far-point.`;
   } else {
     ['r-sph','r-cyl','r-fp1','r-fp2'].forEach(id => D(id).textContent = 'skipped');
     D('r-raxis').textContent = '—'; D('r-note').textContent = '';
+    D('r-severity').textContent = '';
+  }
+
+  // Retest banner
+  const retestMsgs = ConfidenceReporter.autoRetest(q, ref);
+  if (retestMsgs.length) {
+    D('r-retest').style.display   = 'block';
+    D('r-retest-msg').textContent = retestMsgs.join(' ');
+  } else {
+    D('r-retest').style.display   = 'none';
   }
 
   // Previous eye
@@ -841,8 +877,8 @@ function showResults() {
     D('r-prev-sn1').textContent       = `20/${prev.sn1}`;
     D('r-prev-sn2').textContent       = `20/${prev.sn2}`;
     const pr = prev.refraction;
-    D('r-prev-sph').textContent       = pr ? `−${pr.sph.toFixed(2)} D` : 'skipped';
-    D('r-prev-cyl').textContent       = pr ? `−${pr.cyl.toFixed(2)} D` : 'skipped';
+    D('r-prev-sph').textContent       = pr ? `${pr.sph.toFixed(2)} D` : 'skipped';
+    D('r-prev-cyl').textContent       = pr ? `${pr.cyl.toFixed(2)} D` : 'skipped';
     D('r-prev-raxis').textContent     = pr ? `${pr.axis}°` : '—';
     D('r-title').textContent          = 'Results — Both Eyes';
     D('btn-other-eye').textContent    = '✓ Done — Restart';
@@ -861,11 +897,12 @@ function showResults() {
 }
 
 function resetEyeState() {
-  axisEngine  = null; staircase1  = null; staircase2 = null;
-  foundAxis   = null;
-  fpCapture1  = null; fpCapture2  = null;
-  fp1ResultMm = null; fp2ResultMm = null;
-  axisStep    = 0;    stimState   = 'IDLE';
+  axisEngine    = null; interleavedSC = null;
+  foundAxis     = null; axisConf      = 0;
+  holdCapture1  = null; holdCapture2  = null;
+  fp1ResultMm   = null; fp2ResultMm   = null;
+  curMeridianTrial = null;
+  axisStep      = 0;    stimState     = 'IDLE';
   showLabel(''); showMsg(''); setProgress('');
   smoother.reset(); enforcer.reset(); reporter.reset();
   headLostT = null; headGated = false;
@@ -934,7 +971,7 @@ function renderLoop(ts) {
 
   // ── Head-gating (active test phases) ─────────────────────────────────────
   const delta = now - lastFrameT; lastFrameT = now;
-  const GATED = ['AXIS','MDSF_1','MDSF_2','FAR_POINT_1','FAR_POINT_2'];
+  const GATED = ['AXIS','MDSF','FAR_POINT_1','FAR_POINT_2'];
   if (GATED.includes(appState)) {
     reporter.update(distMm, !!faceLms);
     if (!faceLms) {
@@ -973,8 +1010,8 @@ function renderLoop(ts) {
   }
   const earL = faceLms ? computeEAR(faceLms, L_EAR_IDX) : 0.3;
   const earR = faceLms ? computeEAR(faceLms, R_EAR_IDX) : 0.3;
-  if (!coverState.left  && earL < 0.18) coverState.left  = 'closed';
-  if (!coverState.right && earR < 0.18) coverState.right = 'closed';
+  if (!coverState.left  && earL < 0.15) coverState.left  = 'closed';
+  if (!coverState.right && earR < 0.15) coverState.right = 'closed';
   const coverResult = enforcer.update(coverState, currentEye, earL, earR);
 
   updateDistBadge(smoothedCm);
@@ -1054,7 +1091,7 @@ function renderLoop(ts) {
     renderer.drawFixation(); return;
   }
 
-  // ── Axis search ───────────────────────────────────────────────────────────
+  // ── Axis search (tripole) ─────────────────────────────────────────────────
   if (appState === 'AXIS') {
     const elapsed = now - stimStateT;
     if      (axisStep === 0) { startNextAxisPair(); }
@@ -1063,7 +1100,7 @@ function renderLoop(ts) {
       if (elapsed > AXIS_READY_MS) { axisStep = 2; stimStateT = now; }
     }
     else if (axisStep === 2) {
-      renderer.drawGrating({ angleDeg: axisPair[0], cpd: AXIS_CPD, distMm, mmPerPx, color: '#0044FF', fixationDot: true, type: 'grating' });
+      renderer.drawGrating({ angleDeg: axisPair[0], cpd: AXIS_CPD, distMm, mmPerPx, color: '#0088FF', fixationDot: true, type: 'tripole' });
       showLabel('FIRST', '#44AAFF');
       if (elapsed > AXIS_DUR_MS) { axisStep = 3; stimStateT = now; }
     }
@@ -1072,26 +1109,28 @@ function renderLoop(ts) {
       if (elapsed > AXIS_ISI_MS) {
         axisStep = 4; stimStateT = now;
         showLabel('SECOND', '#FF8800');
-        renderer.drawGrating({ angleDeg: axisPair[1], cpd: AXIS_CPD, distMm, mmPerPx, color: '#0044FF', fixationDot: true, type: 'grating' });
+        renderer.drawGrating({ angleDeg: axisPair[1], cpd: AXIS_CPD, distMm, mmPerPx, color: '#0088FF', fixationDot: true, type: 'tripole' });
       }
     }
     else if (axisStep === 4) {
       if (elapsed < AXIS_DUR_MS) {
-        renderer.drawGrating({ angleDeg: axisPair[1], cpd: AXIS_CPD, distMm, mmPerPx, color: '#0044FF', fixationDot: true, type: 'grating' });
+        renderer.drawGrating({ angleDeg: axisPair[1], cpd: AXIS_CPD, distMm, mmPerPx, color: '#0088FF', fixationDot: true, type: 'tripole' });
         showLabel('SECOND', '#FF8800');
       } else {
         renderer.drawFixation(); showLabel('');
         showMsg('Which was SHARPER?   Press  1 (first)  or  2 (second)');
       }
     }
-    setDv('d-ax-prog', axisEngine ? `${axisEngine.getProgress().done}/${axisEngine.getProgress().total}` : '—');
+    setDv('d-ax-prog', axisEngine ? `${axisEngine.getProgress().done}/6` : '—');
     return;
   }
 
-  // ── MDSF ─────────────────────────────────────────────────────────────────
-  if (appState === 'MDSF_1' || appState === 'MDSF_2') {
+  // ── MDSF (interleaved dual-meridian) ─────────────────────────────────────
+  if (appState === 'MDSF') {
     const elapsed = now - stimStateT;
-    const axis    = appState === 'MDSF_1' ? mdsf1Axis : mdsf2Axis;
+    const trialAxis = curMeridianTrial?.axis ?? mdsf1Axis;
+    const trialCPD  = curMeridianTrial?.cpd  ?? 3;
+    const meridianLabel = curMeridianTrial?.meridian === 0 ? `${mdsf1Axis}°` : `${mdsf2Axis}°`;
 
     if (stimState === 'MDSF_ISI') {
       renderer.drawFixation();
@@ -1106,7 +1145,7 @@ function renderLoop(ts) {
       if (mdsfSide === 'left') ctx.rect(0, 0, W/2, H);
       else                     ctx.rect(W/2, 0, W/2, H);
       ctx.clip();
-      renderer.drawGrating({ angleDeg: axis, cpd: currentSC.currentCPD, distMm, mmPerPx, color: '#ffffff', fixationDot: false, type: 'grating' });
+      renderer.drawGrating({ angleDeg: trialAxis, cpd: trialCPD, distMm, mmPerPx, color: '#ffffff', fixationDot: false, type: 'grating' });
       ctx.restore();
       // side labels
       ctx.font = 'bold 18px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'top';
@@ -1120,6 +1159,9 @@ function renderLoop(ts) {
       ctx.strokeStyle = '#666'; ctx.lineWidth = 2; ctx.beginPath();
       ctx.moveTo(W/2-12,H/2); ctx.lineTo(W/2+12,H/2);
       ctx.moveTo(W/2,H/2-12); ctx.lineTo(W/2,H/2+12); ctx.stroke();
+      // meridian indicator (top-right)
+      ctx.fillStyle = '#444'; ctx.font = '11px sans-serif'; ctx.textAlign = 'right';
+      ctx.fillText(`axis ${meridianLabel}`, W - 10, 14);
       if (elapsed > MDSF_DUR_MS) { stimState = 'MDSF_RESPONSE'; stimStateT = now; }
 
     } else if (stimState === 'MDSF_RESPONSE') {
@@ -1147,38 +1189,39 @@ function renderLoop(ts) {
       renderer.drawFixation();
       if (elapsed > MDSF_FB_MS) {
         showLabel('');
-        if (currentSC.isDone()) {
-          const thr = currentSC.threshold();
-          if (appState === 'MDSF_1') {
-            showLabel(`Meridian 1: ${thr.toFixed(1)} CPD`, '#00FF88');
-            setState('MDSF_1_DONE');
-            setTimeout(() => { showLabel(''); beginMDSF(2); }, 2200);
-          } else {
-            showLabel(`Meridian 2: ${thr.toFixed(1)} CPD`, '#00FF88');
-            setState('MDSF_2_DONE');
-            setTimeout(() => { showLabel(''); beginFarPoint(1); }, 2200);
-          }
+        if (interleavedSC.isDone()) {
+          const t0 = interleavedSC.threshold(0), t1 = interleavedSC.threshold(1);
+          showLabel(`${t0.toFixed(1)} / ${t1.toFixed(1)} CPD`, '#00FF88');
+          setState('MDSF_DONE');
+          setTimeout(() => { showLabel(''); beginFarPoint(1); }, 2000);
         } else {
           startMDSFTrial();
         }
       }
     }
 
-    setDv('d-sc-rev', currentSC?.reversalCount ?? '—');
-    setDv('d-sc-tri', currentSC?.trialCount    ?? '—');
-    setDv('d-sc-cpd', currentSC?.currentCPD?.toFixed(2) ?? '—');
+    const m0 = curMeridianTrial?.meridian ?? 0;
+    setDv('d-sc-rev', `${interleavedSC?.reversalCount(0) ?? '—'}/${interleavedSC?.reversalCount(1) ?? '—'}`);
+    setDv('d-sc-tri', interleavedSC?.totalTrials ?? '—');
+    setDv('d-sc-cpd', interleavedSC?.currentCPD(m0)?.toFixed(2) ?? '—');
     return;
   }
 
-  // ── Far-point walk-back ───────────────────────────────────────────────────
+  // ── Far-point walk-back (hold-capture) ───────────────────────────────────
   if (appState === 'FAR_POINT_1' || appState === 'FAR_POINT_2') {
-    const num       = appState === 'FAR_POINT_1' ? 1 : 2;
-    const axisAngle = num === 1 ? (foundAxis ?? 0) : ((foundAxis ?? 0) + 90) % 180;
-    const fpCPD     = StimulusRenderer.cpdFromPeriod(FP_GRATING_PX, distMm, mmPerPx);
-    renderer.drawGrating({ angleDeg: axisAngle, cpd: fpCPD, distMm, mmPerPx, color: '#ffffff', fixationDot: true, type: 'grating' });
+    const axisAngle = fpMeridian === 1 ? (foundAxis ?? 0) : ((foundAxis ?? 0) + 90) % 180;
+    renderer.drawGrating({ angleDeg: axisAngle, cpd: fpTargetCPD, distMm, mmPerPx, color: '#ffffff', fixationDot: true, type: 'grating' });
     if (smoother.isValid()) {
       D('fp-dist').textContent = `${(distMm / 10).toFixed(0)} cm`;
-      D('fp-cpd').textContent  = `${fpCPD.toFixed(1)} CPD at this distance`;
+    }
+    // Run hold-capture
+    const hc  = fpMeridian === 1 ? holdCapture1 : holdCapture2;
+    if (hc) {
+      const hr = hc.update(distMm, !!faceLms);
+      D('fp-hold-bar').style.width = `${hr.progress * 100}%`;
+      if (hr.captured && appState !== 'FAR_POINT_1_DONE' && appState !== 'FAR_POINT_2_DONE') {
+        autoCaptureFarPoint(hr.distMm);
+      }
     }
     return;
   }

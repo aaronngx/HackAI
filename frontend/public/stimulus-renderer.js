@@ -93,9 +93,11 @@ export class StimulusRenderer {
     ctx.rotate(angleDeg * Math.PI / 180);
 
     const diag = Math.ceil(Math.sqrt(W * W + H * H));
+    // For tripole, offset the bright bar to the CENTRE third (dark-bright-dark)
+    const offset = type === 'tripole' ? period / 3 : 0;
     ctx.fillStyle = color;
     for (let x = -diag; x < diag; x += period) {
-      ctx.fillRect(x, -diag, duty, diag * 2);
+      ctx.fillRect(x + offset, -diag, duty, diag * 2);
     }
     ctx.restore();
 
