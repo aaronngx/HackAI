@@ -1,4 +1,11 @@
 import { NextResponse } from "next/server";
+import { ObjectId } from "mongodb";
+import {
+  EYE_DIAGNOSTIC_COLLECTION,
+  insertEyeDiagnostic,
+} from "@/lib/eyeDiagnostics";
+import { getDb } from "@/lib/mongodb";
+import { USERS_COLLECTION } from "@/lib/users";
 
 const DEFAULT_MODEL = "gemini-2.5-flash";
 const PROMPT = `
@@ -49,6 +56,36 @@ function parsePossiblyFencedJson(text) {
     }
   }
   return JSON.parse(cleaned);
+}
+
+async function getAuthenticatedUserId(request) {
+  const authorization = request.headers.get("authorization") || "";
+  if (!authorization.startsWith("Bearer ")) {
+    return null;
+  }
+
+  const token = authorization.slice(7).trim();
+  if (!token) {
+    return null;
+  }
+
+  try {
+    const decoded = Buffer.from(token, "base64url").toString("utf-8");
+    const userId = decoded.split(":")[0] || "";
+
+    if (!ObjectId.isValid(userId)) {
+      return null;
+    }
+
+    const db = await getDb();
+    const user = await db
+      .collection(USERS_COLLECTION)
+      .findOne({ _id: new ObjectId(userId) }, { projection: { _id: 1 } });
+
+    return user ? userId : null;
+  } catch {
+    return null;
+  }
 }
 
 export async function POST(request) {
@@ -125,7 +162,26 @@ export async function POST(request) {
     const responseText = extractResponseText(apiResponse);
     const result = parsePossiblyFencedJson(responseText);
 
-    return NextResponse.json({ success: true, result });
+    const userId = await getAuthenticatedUserId(request);
+    let insertResult = null;
+
+    if (userId) {
+      insertResult = await insertEyeDiagnostic(result, {
+        userId,
+        model,
+        fileName: imageFile.name || null,
+        mimeType,
+      });
+    }
+
+    return NextResponse.json({
+      success: true,
+      result,
+      saved: Boolean(insertResult),
+      userId: userId || null,
+      diagnosticId: insertResult ? insertResult.insertedId.toString() : null,
+      collection: EYE_DIAGNOSTIC_COLLECTION,
+    });
   } catch (error) {
     console.error("Eye disease classify API error:", error);
     return NextResponse.json(
