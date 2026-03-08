@@ -214,7 +214,7 @@ function ReportPanel() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const token = localStorage.getItem("token");
+    const token = sessionStorage.getItem("token");
     if (!token) { setError("Please log in to view your reports."); setLoading(false); return; }
     fetch(`/api/get-exams?token=${encodeURIComponent(token)}`)
       .then(r => r.json())

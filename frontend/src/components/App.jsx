@@ -104,7 +104,11 @@ export default function App() {
   useEffect(() => {
     if (typeof window === "undefined") return;
     try {
-      const storedUser = localStorage.getItem("user");
+      // Clear legacy persistent auth so old localStorage sessions do not auto-login.
+      localStorage.removeItem("token");
+      localStorage.removeItem("user");
+
+      const storedUser = sessionStorage.getItem("user");
       if (storedUser) {
         setUser(JSON.parse(storedUser));
       }
@@ -118,6 +122,8 @@ export default function App() {
   };
 
   const handleLogout = () => {
+    sessionStorage.removeItem("token");
+    sessionStorage.removeItem("user");
     localStorage.removeItem("token");
     localStorage.removeItem("user");
     setUser(null);

@@ -77,8 +77,10 @@ export default function AuthModals({ initialPanel = null, onClose }) {
         return;
       }
 
-      localStorage.setItem("token", data.token);
-      localStorage.setItem("user", JSON.stringify(data.user));
+      sessionStorage.setItem("token", data.token);
+      sessionStorage.setItem("user", JSON.stringify(data.user));
+      localStorage.removeItem("token");
+      localStorage.removeItem("user");
       setLoginEmail("");
       setLoginPassword("");
       onClose();

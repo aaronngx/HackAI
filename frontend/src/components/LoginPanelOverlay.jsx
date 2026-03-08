@@ -30,8 +30,10 @@ export default function LoginPanelOverlay({ originRect, onClose, onSwitchToSignu
         return;
       }
 
-      localStorage.setItem("token", data.token);
-      localStorage.setItem("user", JSON.stringify(data.user));
+      sessionStorage.setItem("token", data.token);
+      sessionStorage.setItem("user", JSON.stringify(data.user));
+      localStorage.removeItem("token");
+      localStorage.removeItem("user");
       setFormData({ email: "", password: "" });
       onClose();
       window.location.reload();
