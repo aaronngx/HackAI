@@ -1,0 +1,859 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Eye Exam Tracker</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      background: #0a0a0f;
+      color: #e0e0e0;
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    header {
+      padding: 10px 20px;
+      background: #111118;
+      border-bottom: 1px solid #222;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      flex-shrink: 0;
+    }
+    header h1 { font-size: 18px; color: #00FF88; letter-spacing: 1px; }
+    header p  { font-size: 12px; color: #666; }
+
+    main {
+      display: flex;
+      flex: 1;
+      overflow: hidden;
+    }
+
+    #viewport-wrap {
+      position: relative;
+      flex: 1;
+      background: #000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+    }
+
+    #video  { position: absolute; opacity: 0; width: 1px; height: 1px; }
+    #canvas { max-width: 100%; max-height: 100%; object-fit: contain; }
+
+    #loading-overlay {
+      position: absolute;
+      inset: 0;
+      background: rgba(0,0,0,0.85);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
+      font-size: 14px;
+      color: #aaa;
+    }
+    .spinner {
+      width: 40px; height: 40px;
+      border: 3px solid #333;
+      border-top-color: #00FF88;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    #debug-panel {
+      width: 240px;
+      background: #111118;
+      border-left: 1px solid #222;
+      padding: 12px;
+      overflow-y: auto;
+      font-size: 12px;
+      flex-shrink: 0;
+    }
+    #debug-panel h2 { color: #00FF88; font-size: 13px; margin-bottom: 8px; }
+    .dbg-label { color: #666; padding: 2px 0; }
+    .dbg-val   { color: #ccc; font-weight: 600; }
+    .dbg-yes   { color: #00FF88; }
+    .dbg-no    { color: #FF4444; }
+    .dbg-warn  { color: #FFD700; }
+    hr { border: none; border-top: 1px solid #222; margin: 6px 0; }
+    .section-label { color: #888; font-size: 10px; text-transform: uppercase;
+                     letter-spacing: 1px; margin: 6px 0 2px; }
+    table { width: 100%; border-collapse: collapse; }
+    td { padding: 1px 0; vertical-align: top; }
+    td:first-child { color: #666; width: 110px; }
+
+    footer {
+      background: #111118;
+      border-top: 1px solid #222;
+      padding: 10px 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      flex-shrink: 0;
+    }
+    .controls { display: flex; gap: 8px; flex-wrap: wrap; }
+
+    button {
+      padding: 7px 16px;
+      border: none;
+      border-radius: 6px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity 0.15s;
+    }
+    button:disabled { opacity: 0.35; cursor: not-allowed; }
+
+    #btn-start { background: #00FF88; color: #000; }
+    #btn-stop  { background: #FF4444; color: #fff; }
+    #btn-zoom  { background: #2255FF; color: #fff; }
+    #btn-calib { background: #FFD700; color: #000; }
+
+    #status-bar { font-size: 12px; color: #888; }
+    #status-bar.error { color: #FF6666; }
+
+    /* fullscreen calibration overlay */
+    #calib-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.92);
+      z-index: 100;
+    }
+    #calib-instr {
+      display: none;
+      position: fixed;
+      top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      background: #1a1a2e;
+      border: 1px solid #00FF88;
+      border-radius: 12px;
+      padding: 32px;
+      max-width: 480px;
+      text-align: center;
+      z-index: 101;
+      line-height: 1.7;
+    }
+    #calib-dot {
+      display: none;
+      position: fixed;
+      width: 20px; height: 20px;
+      background: #FFD700;
+      border-radius: 50%;
+      transform: translate(-50%, -50%);
+      z-index: 102;
+      box-shadow: 0 0 12px #FFD700;
+      animation: pulse 1s ease-in-out infinite alternate;
+    }
+    @keyframes pulse { from { transform: translate(-50%,-50%) scale(1); }
+                       to   { transform: translate(-50%,-50%) scale(1.3); } }
+    #calib-label {
+      position: fixed; color: #fff; font-size: 13px;
+      transform: translate(-50%, 20px);
+      z-index: 103; white-space: nowrap;
+    }
+    #gaze-dot {
+      display: none;
+      position: fixed;
+      width: 14px; height: 14px;
+      background: rgba(0,255,136,0.7);
+      border-radius: 50%;
+      transform: translate(-50%, -50%);
+      pointer-events: none;
+      z-index: 50;
+      box-shadow: 0 0 8px #00FF88;
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1>Eye Exam Tracker</h1>
+    <p>Hand · Face · Eyes · Direction · Distance · Gaze Calibration</p>
+  </div>
+</header>
+
+<main>
+  <div id="viewport-wrap">
+    <video id="video" autoplay playsinline muted></video>
+    <canvas id="canvas"></canvas>
+    <div id="loading-overlay">
+      <div class="spinner"></div>
+      <span id="loading-msg">Loading MediaPipe…</span>
+    </div>
+  </div>
+
+  <aside id="debug-panel">
+    <h2>Debug</h2>
+    <table><tbody>
+      <tr><td>Hand detected</td><td><span id="d-hand" class="dbg-val">—</span></td></tr>
+      <tr><td>Face detected</td><td><span id="d-face" class="dbg-val">—</span></td></tr>
+      <tr><td>Eyes detected</td><td><span id="d-eyes" class="dbg-val">—</span></td></tr>
+      <tr><td>Direction</td><td><span id="d-dir"  class="dbg-val">—</span></td></tr>
+    </tbody></table>
+
+    <hr/><div class="section-label">Eye openness (EAR)</div>
+    <table><tbody>
+      <tr><td>Right eye</td><td><span id="d-ear-r" class="dbg-val">—</span></td></tr>
+      <tr><td>Left eye</td><td><span id="d-ear-l" class="dbg-val">—</span></td></tr>
+    </tbody></table>
+
+    <hr/><div class="section-label">Hand over eye</div>
+    <table><tbody>
+      <tr><td>Right eye</td><td><span id="d-cov-r" class="dbg-val">—</span></td></tr>
+      <tr><td>Left eye</td><td><span id="d-cov-l" class="dbg-val">—</span></td></tr>
+    </tbody></table>
+
+    <hr/><div class="section-label">Pupillary distance</div>
+    <table><tbody>
+      <tr><td>PD (pixels)</td><td><span id="d-pd-px" class="dbg-val">—</span></td></tr>
+      <tr><td>PD (est. mm)</td><td><span id="d-pd-mm" class="dbg-val">—</span></td></tr>
+    </tbody></table>
+
+    <hr/><div class="section-label">Camera distance</div>
+    <table><tbody>
+      <tr><td>Distance</td><td><span id="d-dist" class="dbg-val">—</span></td></tr>
+    </tbody></table>
+
+    <hr/><div class="section-label">Gaze tracking</div>
+    <table><tbody>
+      <tr><td>Yaw</td><td><span id="d-yaw"   class="dbg-val">—</span></td></tr>
+      <tr><td>Pitch</td><td><span id="d-pitch" class="dbg-val">—</span></td></tr>
+      <tr><td>Calibration</td><td><span id="d-calib" class="dbg-val">—</span></td></tr>
+    </tbody></table>
+
+    <hr/>
+    <table><tbody>
+      <tr><td>Face zoom</td><td><span id="d-zoom" class="dbg-val">OFF</span></td></tr>
+      <tr><td>FPS</td><td><span id="d-fps"  class="dbg-val">0</span></td></tr>
+    </tbody></table>
+
+    <hr/>
+    <div style="font-size:11px;line-height:1.8;color:#555">
+      <div><span style="color:#00FF88">●</span> Hand (cam-right)</div>
+      <div><span style="color:#FF8800">●</span> Hand (cam-left)</div>
+      <div><span style="color:#FFD700">●</span> Face oval</div>
+      <div><span style="color:#44AAFF">●</span> Right eye / iris</div>
+      <div><span style="color:#FF44AA">●</span> Left eye / iris</div>
+    </div>
+  </aside>
+</main>
+
+<footer>
+  <div class="controls">
+    <button id="btn-start" disabled>Start Camera</button>
+    <button id="btn-stop"  disabled>Stop Camera</button>
+    <button id="btn-zoom"  disabled>Focus Face</button>
+    <button id="btn-calib" disabled>Calibrate Gaze</button>
+  </div>
+  <div id="status-bar">Initializing…</div>
+</footer>
+
+<!-- Calibration overlay -->
+<div id="calib-overlay" onclick="handleOverlayClick()"></div>
+<div id="calib-instr"></div>
+<div id="calib-dot"><div id="calib-label"></div></div>
+<div id="gaze-dot"></div>
+
+<script type="module">
+// ─────────────────────────────────────────────────────────────────────────────
+// Load MediaPipe from local public/ files — avoids all bundler & COEP issues
+// mediapipe-vision.js = vision_bundle.mjs copied from node_modules
+// mediapipe-wasm/     = WASM files copied from node_modules
+// ─────────────────────────────────────────────────────────────────────────────
+const WASM_PATH  = '/mediapipe-wasm';
+const HAND_MODEL = 'https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task';
+const FACE_MODEL = 'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task';
+
+// DOM refs
+const video     = document.getElementById('video');
+const canvas    = document.getElementById('canvas');
+const ctx       = canvas.getContext('2d');
+const loadingEl = document.getElementById('loading-overlay');
+const loadMsg   = document.getElementById('loading-msg');
+const statusBar = document.getElementById('status-bar');
+const btnStart  = document.getElementById('btn-start');
+const btnStop   = document.getElementById('btn-stop');
+const btnZoom   = document.getElementById('btn-zoom');
+const btnCalib  = document.getElementById('btn-calib');
+
+// Debug spans
+const D = id => document.getElementById(id);
+
+// State
+let handLandmarker = null, faceLandmarker = null;
+let stream = null, animId = null, running = false;
+let zoomEnabled = false, smoothCrop = null, smoothEye = null;
+let frameCount = 0, lastFpsTime = 0, fps = 0;
+let calibrated = false, calibCoeffsX = null, calibCoeffsY = null;
+let calibState = 'IDLE'; // IDLE | INTRO | LOCK | RUNNING | DONE
+let calibPoints = [], calibPairs = [], calibSamples = [], calibFrames = 0;
+let sphereLocked = false, leftOff = null, rightOff = null;
+let leftScale = null, rightScale = null;
+let gazeSmooth = [];
+const GAZE_BUF = 8;
+
+// ── Calibration grid ─────────────────────────────────────────────────────────
+const CALIB_GRID = [
+  [0.15,0.15],[0.50,0.15],[0.85,0.15],
+  [0.15,0.50],[0.50,0.50],[0.85,0.50],
+  [0.15,0.85],[0.50,0.85],[0.85,0.85],
+];
+const N_LOCK = 40, N_SETTLE = 25, N_COLLECT = 45;
+let pointIdx = 0;
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+function setStatus(msg, isError = false) {
+  statusBar.textContent = msg;
+  statusBar.className = isError ? 'error' : '';
+}
+
+function lerp(prev, next, a = 0.1) {
+  if (!prev) return { ...next };
+  return { nx: prev.nx+(next.nx-prev.nx)*a, ny: prev.ny+(next.ny-prev.ny)*a,
+           nw: prev.nw+(next.nw-prev.nw)*a, nh: prev.nh+(next.nh-prev.nh)*a };
+}
+
+function dist(a, b) {
+  return Math.hypot(a.x - b.x, a.y - b.y);
+}
+
+// EAR (eye aspect ratio)  landmark indices for 6-point EAR
+const R_EAR = [33,160,158,133,153,144]; // right
+const L_EAR = [362,385,387,263,373,380]; // left
+function ear(lms, idx) {
+  const p = i => lms[idx[i]];
+  const n = (a,b) => Math.hypot(a.x-b.x, a.y-b.y, (a.z||0)-(b.z||0));
+  return (n(p(1),p(5)) + n(p(2),p(4))) / (2 * n(p(0),p(3)));
+}
+
+// Face bbox for zoom
+function faceBBox(lms, cw, ch) {
+  let minX=1, maxX=0, minY=1, maxY=0;
+  for (const l of lms) {
+    if (l.x<minX) minX=l.x; if (l.x>maxX) maxX=l.x;
+    if (l.y<minY) minY=l.y; if (l.y>maxY) maxY=l.y;
+  }
+  const fw=maxX-minX, fh=maxY-minY, cx=minX+fw/2, cy=minY+fh/2, PAD=0.35;
+  let nw=fw*(1+2*PAD), nh=fh*(1+2*PAD);
+  const ar=cw/ch;
+  if (nw*cw/(nh*ch) > ar) nh=nw*cw/(ar*ch); else nw=nh*ch*ar/cw;
+  let nx=Math.max(0, Math.min(1-nw, cx-nw/2));
+  let ny=Math.max(0, Math.min(1-nh, cy-nh/2));
+  return { nx, ny, nw: Math.min(nw,1-nx), nh: Math.min(nh,1-ny) };
+}
+
+function toScreen(crop, cw, ch) {
+  if (!crop) return lm => ({ x:(1-lm.x)*cw, y:lm.y*ch });
+  return lm => ({
+    x: (1-(lm.x-crop.nx)/crop.nw)*cw,
+    y: ((lm.y-crop.ny)/crop.nh)*ch
+  });
+}
+
+// ── Drawing ───────────────────────────────────────────────────────────────────
+const FACE_OVAL = [10,338,297,332,284,251,389,356,454,323,361,288,397,365,379,378,400,377,152,148,176,149,150,136,172,58,132,93,234,127,162,21,54,103,67,109];
+const R_EYE_CONTOUR = [33,7,163,144,145,153,154,155,133,173,157,158,159,160,161,246];
+const L_EYE_CONTOUR = [362,382,381,380,374,373,390,249,263,466,388,387,386,385,384,398];
+const R_IRIS = [468,469,470,471,472];
+const L_IRIS = [473,474,475,476,477];
+
+function drawFace(lms, ts, cw, ch) {
+  // Face oval
+  ctx.beginPath(); ctx.strokeStyle='#FFD700'; ctx.lineWidth=1.5;
+  FACE_OVAL.forEach((i,k) => {
+    const p = ts(lms[i]);
+    k===0 ? ctx.moveTo(p.x,p.y) : ctx.lineTo(p.x,p.y);
+  });
+  ctx.closePath(); ctx.stroke();
+
+  // Right eye
+  ctx.beginPath(); ctx.strokeStyle='#44AAFF'; ctx.lineWidth=1.2;
+  R_EYE_CONTOUR.forEach((i,k) => {
+    const p=ts(lms[i]); k===0?ctx.moveTo(p.x,p.y):ctx.lineTo(p.x,p.y);
+  });
+  ctx.closePath(); ctx.stroke();
+
+  // Left eye
+  ctx.beginPath(); ctx.strokeStyle='#FF44AA'; ctx.lineWidth=1.2;
+  L_EYE_CONTOUR.forEach((i,k) => {
+    const p=ts(lms[i]); k===0?ctx.moveTo(p.x,p.y):ctx.lineTo(p.x,p.y);
+  });
+  ctx.closePath(); ctx.stroke();
+
+  // Irises
+  if (lms[468]) {
+    const ri = lms[468], rr = dist(lms[469], lms[471]) / 2;
+    const rp = ts(ri);
+    ctx.beginPath(); ctx.strokeStyle='#44AAFF'; ctx.lineWidth=2;
+    ctx.arc(rp.x, rp.y, rr * cw, 0, Math.PI*2); ctx.stroke();
+  }
+  if (lms[473]) {
+    const li = lms[473], lr = dist(lms[474], lms[476]) / 2;
+    const lp = ts(li);
+    ctx.beginPath(); ctx.strokeStyle='#FF44AA'; ctx.lineWidth=2;
+    ctx.arc(lp.x, lp.y, lr * cw, 0, Math.PI*2); ctx.stroke();
+  }
+}
+
+const HAND_CONNECTIONS = [
+  [0,1],[1,2],[2,3],[3,4],[0,5],[5,6],[6,7],[7,8],
+  [0,9],[9,10],[10,11],[11,12],[0,13],[13,14],[14,15],[15,16],
+  [0,17],[17,18],[18,19],[19,20],[5,9],[9,13],[13,17]
+];
+function drawHand(lms, ts, color) {
+  ctx.strokeStyle = color; ctx.lineWidth = 2;
+  for (const [a,b] of HAND_CONNECTIONS) {
+    const pa=ts(lms[a]), pb=ts(lms[b]);
+    ctx.beginPath(); ctx.moveTo(pa.x,pa.y); ctx.lineTo(pb.x,pb.y); ctx.stroke();
+  }
+  ctx.fillStyle = color;
+  for (const l of lms) {
+    const p=ts(l); ctx.beginPath(); ctx.arc(p.x,p.y,3,0,Math.PI*2); ctx.fill();
+  }
+}
+
+function drawGazeRays(faceLms, ts, cw, ch) {
+  // Simple gaze ray from iris toward projected direction
+  const rIris = ts(faceLms[468]), lIris = ts(faceLms[473]);
+  const noseTip = ts(faceLms[4]);
+  // Draw small circles at iris centers
+  ctx.beginPath(); ctx.strokeStyle='#44AAFF88'; ctx.lineWidth=1;
+  ctx.moveTo(rIris.x, rIris.y); ctx.lineTo(noseTip.x, noseTip.y); ctx.stroke();
+  ctx.beginPath(); ctx.strokeStyle='#FF44AA88'; ctx.lineWidth=1;
+  ctx.moveTo(lIris.x, lIris.y); ctx.lineTo(noseTip.x, noseTip.y); ctx.stroke();
+}
+
+// ── Gaze computation (simple head-pose based) ─────────────────────────────────
+// Nose indices for PCA-based head pose
+const NOSE_IDX = [4,45,275,220,440,1,5,51,281,44,274,241,461,125,354,218,438,195,167,393,165,391,3,248];
+
+function computeHeadGaze(lms, vw, vh) {
+  // Simple gaze estimate using eye midpoint vs nose
+  const rIris = lms[468], lIris = lms[473];
+  if (!rIris || !lIris) return null;
+  const eyeMidX = (rIris.x + lIris.x) / 2;
+  const eyeMidY = (rIris.y + lIris.y) / 2;
+  const noseTip = lms[4];
+  // Rough gaze vector from nose to eye midpoint projected outward
+  const dx = eyeMidX - noseTip.x;
+  const dy = eyeMidY - noseTip.y;
+  const yaw   = -dx * 180;   // rough degrees
+  const pitch = -dy * 180;
+  return { yaw, pitch };
+}
+
+// ── PD & Distance ─────────────────────────────────────────────────────────────
+function computePD(lms, vw, vh) {
+  if (!lms[468] || !lms[473]) return null;
+  const pdPx = Math.hypot((lms[473].x-lms[468].x)*vw, (lms[473].y-lms[468].y)*vh);
+  const IRIS_REAL_MM = 11.7, ASSUMED_FOV = 60;
+  const irisPx = Math.hypot((lms[469].x-lms[471].x)*vw, (lms[469].y-lms[471].y)*vh) / 2;
+  const pdMm = irisPx > 0 ? (pdPx / irisPx) * (IRIS_REAL_MM / 2) : null;
+  const focalPx = vw / (2 * Math.tan(ASSUMED_FOV * Math.PI / 360));
+  const IPD_MM = 63, distCm = pdPx > 0 ? (IPD_MM * focalPx) / (pdPx * 10) : null;
+  return { pdPx, pdMm, distCm };
+}
+
+// ── Hand direction ────────────────────────────────────────────────────────────
+let dirBuf = [];
+function classifyDir(lms) {
+  const mcp=lms[5], tip=lms[8], wrist=lms[0];
+  const td=Math.hypot(tip.x-wrist.x, tip.y-wrist.y);
+  const md=Math.hypot(mcp.x-wrist.x, mcp.y-wrist.y);
+  if (td < md*1.2) return 'UNKNOWN';
+  const dx=tip.x-mcp.x, dy=tip.y-mcp.y;
+  return Math.abs(dx)>=Math.abs(dy) ? (dx>0?'RIGHT':'LEFT') : (dy>0?'DOWN':'UP');
+}
+function smoothDir(d) {
+  dirBuf.push(d); if (dirBuf.length>5) dirBuf.shift();
+  const counts={};
+  for (const x of dirBuf) counts[x]=(counts[x]||0)+1;
+  return Object.entries(counts).sort((a,b)=>b[1]-a[1])[0][0];
+}
+
+// ── Hand-over-eye detection ───────────────────────────────────────────────────
+function handOverEye(handLms, faceLms, vw, vh) {
+  if (!handLms || !faceLms || !faceLms[468]) return { l:false, r:false };
+  const lIris={x:faceLms[473].x*vw, y:faceLms[473].y*vh};
+  const rIris={x:faceLms[468].x*vw, y:faceLms[468].y*vh};
+  const pd=Math.hypot(rIris.x-lIris.x, rIris.y-lIris.y);
+  const R=Math.max(30, pd*0.6);
+  // check finger closure
+  const wrist=handLms[0];
+  const FINGERS=[[4,2],[8,5],[12,9],[16,13],[20,17]];
+  let spread=0;
+  for (const [ti,mi] of FINGERS) {
+    const td=Math.hypot(handLms[ti].x-wrist.x,handLms[ti].y-wrist.y,handLms[ti].z-wrist.z);
+    const md=Math.hypot(handLms[mi].x-wrist.x,handLms[mi].y-wrist.y,handLms[mi].z-wrist.z);
+    if (md>1e-6 && td/md>1.3) spread++;
+  }
+  if (spread>1) return { l:false, r:false };
+  let lc=0, rc=0;
+  for (const lm of handLms) {
+    const hx=lm.x*vw, hy=lm.y*vh;
+    if (Math.hypot(hx-lIris.x,hy-lIris.y)<=R) lc++;
+    if (Math.hypot(hx-rIris.x,hy-rIris.y)<=R) rc++;
+  }
+  return { l:lc>=3, r:rc>=3 };
+}
+
+// ── Calibration polynomial ────────────────────────────────────────────────────
+function polyBasis(u,v) { return [1,u,v,u*v,u*u,v*v]; }
+function evalPoly(c,b)   { return c.reduce((s,ci,i)=>s+ci*b[i],0); }
+function leastSquares(A,b) {
+  const N=A.length, M=A[0].length;
+  const ATA=Array.from({length:M},()=>new Array(M).fill(0));
+  const ATb=new Array(M).fill(0);
+  for (let i=0;i<N;i++) {
+    for (let r=0;r<M;r++) {
+      ATb[r]+=A[i][r]*b[i];
+      for (let c=0;c<M;c++) ATA[r][c]+=A[i][r]*A[i][c];
+    }
+  }
+  const aug=ATA.map((row,r)=>[...row,ATb[r]]);
+  for (let col=0;col<M;col++) {
+    let maxRow=col;
+    for (let row=col+1;row<M;row++) if (Math.abs(aug[row][col])>Math.abs(aug[maxRow][col])) maxRow=row;
+    [aug[col],aug[maxRow]]=[aug[maxRow],aug[col]];
+    const piv=aug[col][col];
+    if (Math.abs(piv)<1e-12) throw new Error('Singular');
+    for (let row=col+1;row<M;row++) {
+      const f=aug[row][col]/piv;
+      for (let k=col;k<=M;k++) aug[row][k]-=f*aug[col][k];
+    }
+  }
+  const x=new Array(M);
+  for (let row=M-1;row>=0;row--) {
+    x[row]=aug[row][M];
+    for (let col=row+1;col<M;col++) x[row]-=aug[row][col]*x[col];
+    x[row]/=aug[row][row];
+  }
+  return x;
+}
+
+// ── Calibration overlay helpers ───────────────────────────────────────────────
+function showCalibIntro() {
+  document.getElementById('calib-overlay').style.display='block';
+  const instr=document.getElementById('calib-instr');
+  instr.style.display='block';
+  instr.innerHTML=`
+    <strong style="color:#00FF88;font-size:20px">Eye Tracking Calibration</strong><br><br>
+    <strong>Step 1:</strong> Look at the center dot — eye positions will be locked.<br>
+    <strong>Step 2:</strong> Follow <strong>9 dots</strong> around the screen.<br><br>
+    Keep your <strong>head still</strong>. Sit comfortably.<br><br>
+    <span style="color:#FFD700">Click anywhere or press <strong>Space</strong> to begin.</span>
+  `;
+  document.getElementById('calib-dot').style.display='none';
+}
+function hideCalib() {
+  document.getElementById('calib-overlay').style.display='none';
+  document.getElementById('calib-instr').style.display='none';
+  document.getElementById('calib-dot').style.display='none';
+}
+function showDot(sx, sy, label) {
+  document.getElementById('calib-instr').style.display='none';
+  const dot=document.getElementById('calib-dot');
+  dot.style.display='block';
+  dot.style.left=`${sx*100}vw`; dot.style.top=`${sy*100}vh`;
+  document.getElementById('calib-label').textContent=label;
+}
+function showGazeDot(sx, sy) {
+  const d=document.getElementById('gaze-dot');
+  d.style.display='block';
+  d.style.left=`${sx*100}vw`; d.style.top=`${sy*100}vh`;
+}
+function hideGazeDot() { document.getElementById('gaze-dot').style.display='none'; }
+
+window.handleOverlayClick = function() {
+  if (calibState==='INTRO') { calibState='LOCK'; startCalibLock(); }
+};
+document.addEventListener('keydown', e => {
+  if (e.code==='Space' && calibState==='INTRO') { e.preventDefault(); calibState='LOCK'; startCalibLock(); }
+});
+
+function startCalibLock() {
+  calibFrames=0; sphereLocked=false;
+  showDot(0.5, 0.5, 'Look here — locking eye positions…');
+}
+
+function tryFitCalib() {
+  try {
+    const A=calibPairs.map(p=>polyBasis(p.u,p.v));
+    const bx=calibPairs.map(p=>p.sx), by=calibPairs.map(p=>p.sy);
+    calibCoeffsX=leastSquares(A,bx);
+    calibCoeffsY=leastSquares(A,by);
+    calibrated=true; calibState='DONE';
+    hideCalib();
+    btnCalib.textContent='Recalibrate Gaze';
+    D('d-calib').textContent='READY'; D('d-calib').className='dbg-val dbg-yes';
+    setStatus('Calibrated — gaze dot is live.');
+  } catch(e) {
+    calibState='IDLE'; hideCalib();
+    setStatus('Calibration failed — try again.', true);
+  }
+}
+
+// ── Main render loop ──────────────────────────────────────────────────────────
+let lastFaceLms = null;
+
+function renderFrame(timestamp) {
+  if (!running) return;
+  animId = requestAnimationFrame(renderFrame);
+  if (video.videoWidth===0 || video.readyState<2) return;
+
+  const vw=video.videoWidth, vh=video.videoHeight;
+  if (canvas.width!==vw) { canvas.width=vw; canvas.height=vh; }
+  const cw=vw, ch=vh;
+
+  // Run detectors
+  const hr = handLandmarker.detectForVideo(video, timestamp);
+  const fr = faceLandmarker.detectForVideo(video, timestamp);
+
+  const hands = hr.landmarks || [];
+  const faces = fr.faceLandmarks || [];
+  const faceLms = faces[0] || null;
+  if (faceLms) lastFaceLms = faceLms;
+
+  // Zoom crop
+  let crop = null;
+  if (zoomEnabled && faceLms) {
+    smoothCrop = lerp(smoothCrop, faceBBox(faceLms, cw, ch), 0.1);
+    crop = smoothCrop;
+  }
+
+  const ts = toScreen(crop, cw, ch);
+
+  // Draw video frame
+  ctx.clearRect(0,0,cw,ch);
+  if (crop) {
+    ctx.drawImage(video, crop.nx*vw, crop.ny*vh, crop.nw*vw, crop.nh*vh, 0, 0, cw, ch);
+  } else {
+    ctx.save(); ctx.scale(-1,1); ctx.drawImage(video,-cw,0,cw,ch); ctx.restore();
+  }
+
+  // ── Face ───────────────────────────────────────────────────────────────────
+  let gaze=null, pd=null;
+  if (faceLms) {
+    drawFace(faceLms, ts, cw, ch);
+    gaze = computeHeadGaze(faceLms, vw, vh);
+    pd   = computePD(faceLms, vw, vh);
+
+    // Smooth gaze
+    if (gaze) {
+      gazeSmooth.push(gaze); if (gazeSmooth.length>GAZE_BUF) gazeSmooth.shift();
+      const avgYaw  = gazeSmooth.reduce((s,g)=>s+g.yaw,0)/gazeSmooth.length;
+      const avgPitch= gazeSmooth.reduce((s,g)=>s+g.pitch,0)/gazeSmooth.length;
+      gaze = { yaw: avgYaw, pitch: avgPitch };
+
+      // Calibration feeding
+      if (calibState==='LOCK') {
+        calibFrames++;
+        if (!sphereLocked && calibFrames>=N_LOCK && faceLms) {
+          sphereLocked=true;
+          calibState='RUNNING';
+          calibSamples=[]; calibPairs=[]; pointIdx=0; calibFrames=0;
+          const [sx,sy]=CALIB_GRID[0];
+          showDot(sx,sy,`1 / ${CALIB_GRID.length}`);
+        }
+      } else if (calibState==='RUNNING') {
+        calibFrames++;
+        if (calibFrames>N_SETTLE) {
+          calibSamples.push({yaw:gaze.yaw, pitch:gaze.pitch});
+          if (calibSamples.length>=N_COLLECT) {
+            const n=calibSamples.length;
+            const mu={yaw:calibSamples.reduce((s,p)=>s+p.yaw,0)/n,
+                      pitch:calibSamples.reduce((s,p)=>s+p.pitch,0)/n};
+            const [sx,sy]=CALIB_GRID[pointIdx];
+            calibPairs.push({u:mu.yaw,v:mu.pitch,sx,sy});
+            calibSamples=[]; calibFrames=0; pointIdx++;
+            if (pointIdx>=CALIB_GRID.length) { tryFitCalib(); }
+            else {
+              const [nsx,nsy]=CALIB_GRID[pointIdx];
+              showDot(nsx,nsy,`${pointIdx+1} / ${CALIB_GRID.length}`);
+            }
+          }
+        }
+      }
+
+      // Show gaze dot if calibrated
+      if (calibrated && calibCoeffsX) {
+        const b=polyBasis(gaze.yaw, gaze.pitch);
+        const gx=Math.max(0,Math.min(1,evalPoly(calibCoeffsX,b)));
+        const gy=Math.max(0,Math.min(1,evalPoly(calibCoeffsY,b)));
+        showGazeDot(gx, gy);
+      }
+    }
+  }
+
+  // ── Hands ──────────────────────────────────────────────────────────────────
+  let handDir='—', handLms0=null;
+  for (let i=0;i<hands.length;i++) {
+    const lms=hands[i];
+    const label=hr.handedness?.[i]?.[0]?.categoryName||'';
+    const color = label==='Left' ? '#00FF88' : '#FF8800';
+    drawHand(lms, ts, color);
+    if (i===0) { handDir=smoothDir(classifyDir(lms)); handLms0=lms; }
+  }
+
+  // ── Eye cover ──────────────────────────────────────────────────────────────
+  const cover = handOverEye(handLms0, faceLms, vw, vh);
+
+  // ── Direction label ────────────────────────────────────────────────────────
+  if (handLms0 && handDir!=='UNKNOWN' && handDir!=='—') {
+    const tip=ts(handLms0[8]);
+    const colors={'UP':'#00FF88','DOWN':'#FF8800','LEFT':'#FFD700','RIGHT':'#44AAFF'};
+    ctx.fillStyle=colors[handDir]||'#fff';
+    ctx.font='bold 28px system-ui';
+    ctx.fillText(handDir, tip.x-30, tip.y-20);
+  }
+
+  // ── Distance badge ─────────────────────────────────────────────────────────
+  if (pd && pd.distCm != null && faceLms) {
+    const nose=ts(faceLms[4]);
+    const dc=pd.distCm;
+    ctx.fillStyle= dc<25?'#FF4444': dc<40?'#FFD700':'#00FF88';
+    ctx.font='bold 14px system-ui';
+    ctx.fillText(`~${dc.toFixed(0)} cm`, nose.x+10, nose.y-20);
+  }
+
+  // ── FPS ────────────────────────────────────────────────────────────────────
+  frameCount++;
+  const now=performance.now();
+  if (now-lastFpsTime>=1000) { fps=frameCount; frameCount=0; lastFpsTime=now; }
+
+  // ── Update debug panel ─────────────────────────────────────────────────────
+  function setD(id, text, cls='') {
+    const el=D(id); if(!el) return;
+    el.textContent=text;
+    el.className='dbg-val' + (cls?' dbg-'+cls:'');
+  }
+  setD('d-hand', hands.length>0?'YES':'NO', hands.length>0?'yes':'no');
+  setD('d-face', faceLms?'YES':'NO', faceLms?'yes':'no');
+  setD('d-eyes', faceLms && faceLms.length>=478?'YES':'NO', faceLms&&faceLms.length>=478?'yes':'no');
+  D('d-dir').textContent = handDir;
+  D('d-fps').textContent = `${fps} fps`;
+  if (faceLms) {
+    const re=ear(faceLms,R_EAR), le=ear(faceLms,L_EAR);
+    D('d-ear-r').textContent=`${re>0.2?'open':'closed'} (${re.toFixed(2)})`;
+    D('d-ear-l').textContent=`${le>0.2?'open':'closed'} (${le.toFixed(2)})`;
+    if (pd) {
+      D('d-pd-px').textContent = `${Math.round(pd.pdPx)} px`;
+      D('d-pd-mm').textContent = pd.pdMm ? `~${pd.pdMm.toFixed(1)} mm` : '—';
+      if (pd.distCm != null) setD('d-dist', `~${pd.distCm.toFixed(0)} cm`, pd.distCm<25?'no':pd.distCm<40?'warn':'yes');
+    }
+    if (gaze) {
+      D('d-yaw').textContent   = `${gaze.yaw.toFixed(1)}°`;
+      D('d-pitch').textContent = `${gaze.pitch.toFixed(1)}°`;
+    }
+  }
+  setD('d-cov-r', cover.r?'COVERED':'clear', cover.r?'no':'yes');
+  setD('d-cov-l', cover.l?'COVERED':'clear', cover.l?'no':'yes');
+  setD('d-zoom', zoomEnabled?'ON':'OFF', zoomEnabled?'yes':'no');
+  if (!calibrated) D('d-calib').textContent='—';
+}
+
+// ── Button handlers ───────────────────────────────────────────────────────────
+btnStart.onclick = async () => {
+  btnStart.disabled=true;
+  try {
+    setStatus('Starting camera…');
+    stream = await navigator.mediaDevices.getUserMedia({
+      video:{ width:{ideal:1280},height:{ideal:720},frameRate:{ideal:30},facingMode:'user' },
+      audio:false
+    });
+    video.srcObject=stream;
+    await new Promise((res,rej) => { video.onloadedmetadata=res; video.onerror=rej; });
+    await video.play();
+    running=true; frameCount=0; lastFpsTime=performance.now(); fps=0;
+    gazeSmooth=[]; dirBuf=[]; smoothCrop=null;
+    btnStop.disabled=false; btnZoom.disabled=false; btnCalib.disabled=false;
+    setStatus('Running — detecting hands, face and eyes.');
+    requestAnimationFrame(renderFrame);
+  } catch(e) {
+    btnStart.disabled=false;
+    setStatus(`Camera error: ${e.message}`, true);
+  }
+};
+
+btnStop.onclick = () => {
+  running=false;
+  if (animId) cancelAnimationFrame(animId);
+  if (stream) { stream.getTracks().forEach(t=>t.stop()); stream=null; }
+  video.srcObject=null;
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  hideCalib(); hideGazeDot();
+  calibState='IDLE'; calibrated=false; calibCoeffsX=null; calibCoeffsY=null;
+  btnStart.disabled=false; btnStop.disabled=true;
+  btnZoom.disabled=true;   btnCalib.disabled=true;
+  btnZoom.textContent='Focus Face'; zoomEnabled=false;
+  btnCalib.textContent='Calibrate Gaze';
+  setStatus('Camera stopped.');
+  D('d-calib').textContent='—'; D('d-calib').className='dbg-val';
+};
+
+btnZoom.onclick = () => {
+  zoomEnabled=!zoomEnabled;
+  if (!zoomEnabled) smoothCrop=null;
+  btnZoom.textContent = zoomEnabled ? 'Exit Zoom' : 'Focus Face';
+  setD('d-zoom', zoomEnabled?'ON':'OFF', zoomEnabled?'yes':'no');
+  function setD(id,t,c){ const e=D(id); if(e){e.textContent=t;e.className='dbg-val'+(c?' dbg-'+c:'');} }
+};
+
+btnCalib.onclick = () => {
+  if (!running) return;
+  calibState='INTRO'; calibrated=false; calibCoeffsX=null; calibCoeffsY=null;
+  sphereLocked=false; gazeSmooth=[]; hideGazeDot();
+  showCalibIntro();
+};
+
+// ── Load models ───────────────────────────────────────────────────────────────
+async function loadModels() {
+  try {
+    loadMsg.textContent='Loading MediaPipe JS…';
+    // Dynamic import of the local bundle — bypasses all bundler static analysis
+    const { HandLandmarker, FaceLandmarker, FilesetResolver } =
+      // eslint-disable-next-line no-new-func
+      await new Function('return import("/mediapipe-vision.js")')();
+
+    loadMsg.textContent='Initializing WASM runtime…';
+    const vision = await FilesetResolver.forVisionTasks(WASM_PATH);
+
+    loadMsg.textContent='Loading Hand model…';
+    handLandmarker = await HandLandmarker.createFromOptions(vision, {
+      baseOptions:{ modelAssetPath: HAND_MODEL, delegate:'GPU' },
+      runningMode:'VIDEO', numHands:2
+    });
+
+    loadMsg.textContent='Loading Face model…';
+    faceLandmarker = await FaceLandmarker.createFromOptions(vision, {
+      baseOptions:{ modelAssetPath: FACE_MODEL, delegate:'GPU' },
+      runningMode:'VIDEO', numFaces:1,
+      outputFaceBlendshapes:false, outputFacialTransformationMatrixes:false
+    });
+
+    loadingEl.style.display='none';
+    btnStart.disabled=false;
+    setStatus('Models ready — click Start Camera.');
+  } catch(e) {
+    loadMsg.textContent=`Failed: ${e.message}`;
+    loadMsg.style.color='#FF6666';
+    setStatus(`Load error: ${e.message}`, true);
+    console.error('[ExamApp]', e);
+  }
+}
+
+loadModels();
+</script>
+</body>
+</html>
