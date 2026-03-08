@@ -197,8 +197,7 @@ function useNarration() {
     }
   };
 
-  // Speaks `text`. If loop=true (default), repeats after a 1.2 s pause until stop().
-  // If loop=false, plays once and stops automatically.
+  // Speaks a single `text`. loop=true repeats after 1.2 s; loop=false plays once.
   const start = (text: string, loop = true) => {
     sessionRef.current += 1;
     const session = sessionRef.current;
@@ -236,25 +235,104 @@ function useNarration() {
         audio.onerror = () => {
           setLoading(false);
           if (session !== sessionRef.current) return;
-          if (loop) {
-            setTimeout(() => { if (session === sessionRef.current) speak(); }, 1200);
-          } else {
-            setPlaying(false);
-          }
+          if (loop) setTimeout(() => { if (session === sessionRef.current) speak(); }, 1200);
+          else setPlaying(false);
         };
         await audio.play();
       } catch {
         setLoading(false);
         if (session !== sessionRef.current) return;
-        if (loop) {
-          setTimeout(() => { if (session === sessionRef.current) speak(); }, 1200);
-        } else {
-          setPlaying(false);
-        }
+        if (loop) setTimeout(() => { if (session === sessionRef.current) speak(); }, 1200);
+        else setPlaying(false);
       }
     };
 
     speak();
+  };
+
+  // Plays an array of texts back-to-back with no gap. When all finish, loops
+  // from the beginning again until stop() is called.
+  // Returns a `finishAfterClip(finalText)` function: when called, the current
+  // clip plays to the end, then `finalText` is spoken once and the sequence stops.
+  const startSequence = (lines: string[]): ((finalText: string) => void) => {
+    let finalTextPending: string | null = null;
+
+    const triggerFinish = (text: string) => { finalTextPending = text; };
+
+    if (!lines.length) return triggerFinish;
+
+    sessionRef.current += 1;
+    const session = sessionRef.current;
+    stopAudio();
+    setPlaying(true);
+    setLoading(false);
+
+    let idx = 0;
+
+    const speakNext = async () => {
+      if (session !== sessionRef.current) return;
+
+      // If a finish was requested, play the final message once then stop.
+      if (finalTextPending !== null) {
+        const text = finalTextPending;
+        finalTextPending = null;
+        setLoading(true);
+        try {
+          const res = await fetch("/api/tts", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ text }),
+          });
+          if (session !== sessionRef.current) return;
+          if (!res.ok) throw new Error("TTS failed");
+          const blob = await res.blob();
+          if (session !== sessionRef.current) return;
+          const url = URL.createObjectURL(blob);
+          stopAudio();
+          if (session !== sessionRef.current) { URL.revokeObjectURL(url); return; }
+          const audio = new Audio(url);
+          audioRef.current = audio;
+          setLoading(false);
+          audio.onended = () => { if (session === sessionRef.current) setPlaying(false); };
+          audio.onerror = () => { setLoading(false); setPlaying(false); };
+          await audio.play();
+        } catch {
+          setLoading(false);
+          setPlaying(false);
+        }
+        return;
+      }
+
+      if (idx >= lines.length) idx = 0; // loop
+      const text = lines[idx++];
+      setLoading(true);
+      try {
+        const res = await fetch("/api/tts", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text }),
+        });
+        if (session !== sessionRef.current) return;
+        if (!res.ok) throw new Error("TTS failed");
+        const blob = await res.blob();
+        if (session !== sessionRef.current) return;
+        const url = URL.createObjectURL(blob);
+        stopAudio();
+        if (session !== sessionRef.current) { URL.revokeObjectURL(url); return; }
+        const audio = new Audio(url);
+        audioRef.current = audio;
+        setLoading(false);
+        audio.onended  = () => { if (session === sessionRef.current) speakNext(); };
+        audio.onerror  = () => { setLoading(false); if (session === sessionRef.current) speakNext(); };
+        await audio.play();
+      } catch {
+        setLoading(false);
+        if (session === sessionRef.current) speakNext();
+      }
+    };
+
+    speakNext();
+    return triggerFinish;
   };
 
   const stop = () => {
@@ -269,7 +347,7 @@ function useNarration() {
     stopAudio();
   }, []);
 
-  return { playing, loading, start, stop };
+  return { playing, loading, start, startSequence, stop };
 }
 
 // ── Exercise Modal ────────────────────────────────────────────────────────────
@@ -281,7 +359,7 @@ function formatTime(s: number) {
 }
 
 function ExerciseModal({ ex, onClose }: { ex: Exercise; onClose: () => void }) {
-  const { playing, loading, start, stop } = useNarration();
+  const { playing, loading, start, startSequence, stop } = useNarration();
 
   const [phase, setPhase]           = useState<"idle" | "running" | "paused" | "done">("idle");
   const [elapsed, setElapsed]       = useState(0);
@@ -303,20 +381,16 @@ function ExerciseModal({ ex, onClose }: { ex: Exercise; onClose: () => void }) {
 
   useEffect(() => { phaseRef.current = phase; }, [phase]);
 
-  // Speak a step on loop — start() handles the repeat internally.
-  const speakStep = (stepIdx: number) => {
-    if (stepIdx < 0 || stepIdx >= ex.steps.length) return;
-    start(`Step ${stepIdx + 1}. ${ex.steps[stepIdx]}`);
-  };
-
-  // Stable refs so the setInterval closure always calls the latest versions
-  // without needing to be recreated when phase changes.
-  const stopRef      = useRef(stop);
-  const startRef     = useRef(start);
-  const speakStepRef = useRef(speakStep);
+  // Stable refs so the setInterval closure always calls the latest versions.
+  const stopRef           = useRef(stop);
+  const startSequenceRef  = useRef(startSequence);
+  // Holds the `finishAfterClip` handle returned by the running sequence.
+  const finishAfterClipRef = useRef<((t: string) => void) | null>(null);
   useEffect(() => { stopRef.current = stop; });
-  useEffect(() => { startRef.current = start; });
-  useEffect(() => { speakStepRef.current = speakStep; });
+  useEffect(() => { startSequenceRef.current = startSequence; });
+
+  // Build the ordered lines for this exercise.
+  const allStepLines = ex.steps.map((s, i) => `Step ${i + 1}. ${s}`);
 
   // ── Start ──
   const handleStart = () => {
@@ -325,16 +399,21 @@ function ExerciseModal({ ex, onClose }: { ex: Exercise; onClose: () => void }) {
     setElapsed(0);
     setActiveStep(0);
     setPhase("running");
-    speakStep(0);
+    finishAfterClipRef.current = startSequenceRef.current(allStepLines);
   };
 
-  // ── Resume (preserves current step) ──
+  // ── Resume (restarts sequence from the current step) ──
   const handleResume = () => {
     setPhase("running");
-    speakStep(activeStepRef.current);
+    const fromStep = activeStepRef.current;
+    const resumeLines = [
+      ...allStepLines.slice(fromStep),
+      ...allStepLines.slice(0, fromStep),
+    ];
+    finishAfterClipRef.current = startSequenceRef.current(resumeLines);
   };
 
-  // ── Timer tick ──
+  // ── Timer tick — drives the visual step indicator only ──
   useEffect(() => {
     if (phase === "running") {
       timerRef.current = setInterval(() => {
@@ -344,14 +423,16 @@ function ExerciseModal({ ex, onClose }: { ex: Exercise; onClose: () => void }) {
 
         if (next >= total) {
           clearInterval(timerRef.current!);
-          stopRef.current();
           setPhase("done");
           setActiveStep(ex.steps.length);
-          setTimeout(() => {
-            if (phaseRef.current === "done") {
-              startRef.current(`Well done! You've completed ${ex.title}. Give your eyes a moment to rest.`, false);
-            }
-          }, 400);
+          // Let the current clip finish, then play the completion message.
+          const completionMsg = `Well done! You've completed ${ex.title}. Give your eyes a moment to rest.`;
+          if (finishAfterClipRef.current) {
+            finishAfterClipRef.current(completionMsg);
+            finishAfterClipRef.current = null;
+          } else {
+            stopRef.current();
+          }
           return;
         }
 
@@ -359,12 +440,6 @@ function ExerciseModal({ ex, onClose }: { ex: Exercise; onClose: () => void }) {
         if (newStep > activeStepRef.current) {
           activeStepRef.current = newStep;
           setActiveStep(newStep);
-          stopRef.current();
-          setTimeout(() => {
-            if (phaseRef.current === "running" && activeStepRef.current === newStep) {
-              speakStepRef.current(newStep);
-            }
-          }, 300);
         }
       }, 1000);
     } else {
@@ -374,11 +449,13 @@ function ExerciseModal({ ex, onClose }: { ex: Exercise; onClose: () => void }) {
   }, [phase]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handlePause = () => {
+    finishAfterClipRef.current = null;
     setPhase("paused");
     stopRef.current();
   };
 
   const handleReset = () => {
+    finishAfterClipRef.current = null;
     elapsedRef.current = 0;
     activeStepRef.current = -1;
     setPhase("idle");
@@ -582,8 +659,46 @@ export default function CarePlanPage() {
     try {
       const rawInput  = localStorage.getItem("irisExamResults");
       const rawReport = localStorage.getItem("irisExamReport");
-      const parsedInput  = rawInput  ? JSON.parse(rawInput)  : null;
       const parsedReport = rawReport ? JSON.parse(rawReport) : null;
+      let parsedInput: ExamInput | null = null;
+
+      if (rawInput) {
+        const p = JSON.parse(rawInput);
+        // New format: { left?: EyeData, right?: EyeData } — normalise into ExamInput
+        if (p && (p.left || p.right) && !p.rightEyeAcuity) {
+          const toSnellen = (sn: number | null | undefined) => sn != null ? `20/${sn}` : "20/20";
+          const sphLabel = (sph: number | null | undefined) => {
+            if (sph == null) return undefined;
+            if (sph <= -0.5) return `Est. ${sph.toFixed(2)} D`;
+            if (sph >= 0.5)  return `Est. +${sph.toFixed(2)} D`;
+            return "None detected";
+          };
+          const cylLabel = (cyl: number | null | undefined) => {
+            if (cyl == null) return undefined;
+            if (Math.abs(cyl) >= 0.25) return `Est. ${cyl.toFixed(2)} D cyl, ${p.left?.refraction?.axis ?? p.right?.refraction?.axis ?? "?"}° axis`;
+            return "None detected";
+          };
+          const eyeL = p.left;
+          const eyeR = p.right;
+          const refL = eyeL?.refraction;
+          const refR = eyeR?.refraction;
+          const sph = refL?.sph ?? refR?.sph;
+          const cyl = refL?.cyl ?? refR?.cyl;
+          parsedInput = {
+            rightEyeAcuity: toSnellen(eyeR?.sn1),
+            leftEyeAcuity:  toSnellen(eyeL?.sn1),
+            myopiaEstimate:     sph != null && sph < -0.5 ? sphLabel(sph) : "None detected",
+            hyperopiaEstimate:  sph != null && sph >  0.5 ? sphLabel(sph) : "None detected",
+            astigmatismEstimate: cylLabel(cyl) ?? "None detected",
+            age: 0,
+            wearsCorrection: "none",
+            previousEyeConditions: "None",
+          };
+        } else {
+          parsedInput = p;
+        }
+      }
+
       setInput(parsedInput   ?? MOCK_INPUT);
       setReport(parsedReport ?? MOCK_REPORT);
       if (!parsedInput || !parsedReport) {
@@ -635,9 +750,9 @@ export default function CarePlanPage() {
         {/* ── Header ── */}
         <div className="fade-up care-header-pad" style={{ background: C.navy, borderBottom: "1px solid #1e2d45", padding: "28px 60px", position: "relative", overflow: "hidden" }}>
           <div style={{ position: "absolute", right: 40, top: -10, fontFamily: "'Bebas Neue'", fontSize: 180, color: "rgba(255,255,255,0.03)", lineHeight: 1, userSelect: "none" }}>CARE</div>
-          <button onClick={() => router.back()} style={{ background: "none", border: "none", cursor: "pointer", color: "rgba(255,255,255,0.5)", display: "flex", alignItems: "center", gap: 6, fontSize: 12, fontFamily: "'DM Mono', monospace", marginBottom: 20, padding: 0 }}>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
-            Back to Report
+          <button onClick={() => { sessionStorage.setItem("irisIntroSeen", "1"); router.back(); }} style={{ display: "inline-flex", alignItems: "center", gap: 8, marginBottom: 20, background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.14)", borderRadius: 10, color: "rgba(255,255,255,0.75)", fontFamily: "'DM Mono', monospace", fontSize: 11, letterSpacing: 1, padding: "7px 14px", cursor: "pointer" }}>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+            HOME
           </button>
           <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={C.brand} strokeWidth="1.5">
@@ -826,7 +941,7 @@ export default function CarePlanPage() {
                       accent: "#f5c842",
                     },
                     {
-                      name: "Comprehensive Eye Exams",
+                      name: "Comprehensive Eye Screenings",
                       icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#a78bfa" strokeWidth="1.5"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>,
                       tagline: "Full diagnostic workup",
                       desc: "Thorough vision and eye health evaluation including retinal imaging, pressure testing, and personalised prescription review.",

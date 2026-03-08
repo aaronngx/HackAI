@@ -6,16 +6,32 @@ import Starsfield from "@/components/Starsfield.js";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-interface ExamInput {
-  rightEyeAcuity: string;
-  leftEyeAcuity: string;
-  myopiaEstimate?: string;      // e.g. "Est. −1.75 D" or "None detected"
-  hyperopiaEstimate?: string;   // e.g. "Est. +1.50 D" or "None detected"
-  astigmatismEstimate?: string; // e.g. "Mild, 90° axis" or "None detected"
-  age: number;
-  wearsCorrection: "glasses" | "contacts" | "none";
-  previousEyeConditions: string;
+interface EyeRefraction {
+  sph: number;
+  cyl: number;
+  axis: number;
+  note?: string | null;
+  colorNote?: string | null;
 }
+
+interface EyeData {
+  testedEye: "left" | "right";
+  coveredEye: "left" | "right";
+  axis?: number | null;
+  axisConf?: number | null;
+  mdsf1?: number | null;    // MDSF along-axis threshold (CPD)
+  mdsf2?: number | null;    // MDSF perp threshold (CPD)
+  sn1?: number | null;      // Snellen denominator from mdsf1
+  sn2?: number | null;      // Snellen denominator from mdsf2
+  fp1Mm?: number | null;    // far-point 1 (mm)
+  fp2Mm?: number | null;    // far-point 2 (mm)
+  refraction?: EyeRefraction | null;
+  quality?: number | null;  // 0-100
+  protocol?: string;
+}
+
+// { left?: EyeData, right?: EyeData } — written by astig-test.html
+type ExamInput = { left?: EyeData; right?: EyeData };
 
 interface Diagnosis {
   condition: string;
@@ -34,101 +50,71 @@ interface ExamReport {
 // ── Mock fallback ─────────────────────────────────────────────────────────────
 
 const MOCK_INPUT: ExamInput = {
-  rightEyeAcuity: "20/40",
-  leftEyeAcuity: "20/20",
-  myopiaEstimate: "Est. −1.75 D",
-  hyperopiaEstimate: "None detected",
-  astigmatismEstimate: "Mild, 90° axis",
-  age: 24,
-  wearsCorrection: "glasses",
-  previousEyeConditions: "None",
+  left: {
+    testedEye: "left", coveredEye: "right",
+    axis: 120, axisConf: 1.0, protocol: "v4-lca",
+    mdsf1: 6.0, mdsf2: 6.0, sn1: 100, sn2: 100,
+    fp1Mm: 894, fp2Mm: 1081,
+    refraction: { sph: -1.15, cyl: -0.19, axis: 30, note: "Primarily spherical myopia, little astigmatism.", colorNote: "· LCA-corrected (red)" },
+    quality: 70,
+  },
 };
 
 const MOCK_REPORT: ExamReport = {
   summary:
-    "Based on this screening, your right eye shows signs consistent with mild myopia at an estimated −1.75 diopters, along with a mild astigmatism. Your left eye appears to be within normal range. These are estimations only — a licensed eye care professional can provide a full evaluation and personalised guidance.",
+    "Your left eye screening suggests mild myopia at an estimated −1.15 D sphere with minimal astigmatism (−0.19 D cyl). Visual acuity measured 20/100 on the primary grating test. These are screening estimates only — a licensed eye care professional can confirm and refine these measurements.",
   diagnoses: [
-    { condition: "Myopia (right eye)", icd10: "H52.1", confidence: 82, estimatedRx: "Est. −1.75 D sphere" },
-    { condition: "Astigmatism (right eye)", icd10: "H52.2", confidence: 70, estimatedRx: "Est. −0.50 D cyl, 90°" },
+    { condition: "Myopia (left eye)", icd10: "H52.1", confidence: 82, estimatedRx: "Est. −1.15 D sphere" },
+    { condition: "Astigmatism (left eye)", icd10: "H52.2", confidence: 65, estimatedRx: "Est. −0.19 D cyl, 30° axis" },
   ],
   urgency: "moderate",
-  urgencyReason: "Acuity differences between eyes noted — consider booking a professional eye exam to confirm these estimates.",
+  urgencyReason: "Reduced visual acuity detected — consider booking a professional eye exam to confirm these estimates.",
 };
 
-// ── Eye care plan builder ─────────────────────────────────────────────────────
+// ── Stat formatting helpers ───────────────────────────────────────────────────
 
-interface EyeCarePlan {
-  exercises: { title: string; description: string; duration: string }[];
-  lubrication: { tip: string; reason: string }[];
-  correctionCare: { tip: string }[];
-  followUpDays: number;       // recommended follow-up in days
+function snellen(sn: number | null | undefined): string {
+  return sn != null ? `20/${sn}` : "—";
 }
 
-function buildEyeCarePlan(input: ExamInput, report: ExamReport): EyeCarePlan {
-  const hasMyopia = report.diagnoses.some(d => d.condition.toLowerCase().includes("myopia"));
-  const hasAstigmatism = report.diagnoses.some(d => d.condition.toLowerCase().includes("astigmatism"));
-  const hasHyperopia = report.diagnoses.some(d => d.condition.toLowerCase().includes("hyperopia"));
-  const wears = input.wearsCorrection;
+function fmtCpd(v: number | null | undefined): string {
+  return v != null ? `${v.toFixed(2)} CPD` : "—";
+}
 
-  const exercises = [
-    {
-      title: "20-20-20 Rule",
-      description: "Every 20 minutes of screen time, look at something 20 feet away for 20 seconds. This relaxes the focusing muscles inside your eyes.",
-      duration: "20 sec every 20 min",
-    },
-    {
-      title: "Near-Far Focusing",
-      description: "Hold a finger close to your nose, focus on it for 5 seconds, then shift focus to something far away for 5 seconds. Repeat 10 times to exercise your eye's zoom muscles.",
-      duration: "2 min · 2× daily",
-    },
-    ...(hasMyopia || hasAstigmatism ? [{
-      title: "Figure-8 Tracing",
-      description: "Imagine a giant figure-8 about 10 feet in front of you. Slowly trace it with your eyes without moving your head. This strengthens the muscles that control eye movement.",
-      duration: "2 min · once daily",
-    }] : []),
-    ...(hasHyperopia ? [{
-      title: "Close Focus Exercise",
-      description: "Hold a printed page at arm's length and slowly bring it toward your face, keeping the text as sharp as possible. Stop when it blurs, then move it back out. This trains your near-focus system.",
-      duration: "1 min · 3× daily",
-    }] : []),
-    {
-      title: "Palming",
-      description: "Rub your palms together to warm them, then gently cup them over your closed eyes — no pressure on the eyeballs. Rest and breathe deeply. This relieves eye tension and digital strain.",
-      duration: "3 min · anytime",
-    },
-  ];
+function fmtMm(mm: number | null | undefined): string {
+  if (mm == null) return "skipped";
+  return `${(mm / 10).toFixed(1)} cm`;
+}
 
-  const lubrication: { tip: string; reason: string }[] = wears === "contacts" ? [
-    { tip: "Use preservative-free rewetting drops designed for contact lenses", reason: "Regular drops can coat your lenses and cause blurry vision or irritation." },
-    { tip: "Follow the 20-20-20 rule strictly — contacts reduce tear flow", reason: "Contact lenses absorb tear film, making dry-eye symptoms worse during screen use." },
-    { tip: "Remove contacts at least 1–2 hours before bed", reason: "Night-time eye rest without lenses allows the ocular surface to recover." },
-    { tip: "Never sleep in daily or monthly lenses unless specifically extended-wear approved", reason: "Overnight wear significantly increases infection risk." },
-  ] : wears === "glasses" ? [
-    { tip: "Use lubricating eye drops (artificial tears) if your eyes feel dry or gritty", reason: "Glasses do not affect tear film, but air conditioning and screen use still dry your eyes out." },
-    { tip: "Consider a humidifier in your workspace", reason: "Low humidity is the #1 environmental cause of dry eye in office settings." },
-    { tip: "Blink fully and consciously — we blink 60% less when reading screens", reason: "Incomplete blinks don't spread tears properly across the eye surface." },
-  ] : [
-    { tip: "Use preservative-free artificial tears 1–2× a day as a baseline", reason: "Even without correction, screen use and air exposure gradually reduce natural tear moisture." },
-    { tip: "Warm compresses on closed eyes for 5 minutes each morning", reason: "Heat unclogs meibomian glands, which produce the oily layer that keeps tears from evaporating." },
-    { tip: "Stay hydrated — aim for 8 cups of water daily", reason: "Tear production drops significantly when you're even mildly dehydrated." },
-  ];
+function fmtD(v: number | null | undefined): string {
+  if (v == null) return "—";
+  return `${v >= 0 ? "+" : ""}${v.toFixed(2)} D`;
+}
 
-  const correctionCare: { tip: string }[] = wears === "glasses" ? [
-    { tip: "Clean lenses with a microfibre cloth and lens-safe solution daily — never use paper towels or clothing." },
-    { tip: "Store glasses in a hard case when not in use to prevent frame warping and lens scratches." },
-    { tip: "Get your frames adjusted every 6–12 months — a misaligned frame forces your eyes to compensate." },
-    { tip: "Anti-reflective coating reduces glare from screens and headlights — worth considering at your next lens update." },
-  ] : wears === "contacts" ? [
-    { tip: "Replace your lens case every 3 months and use fresh solution — never top off old solution." },
-    { tip: "Always wash and dry your hands before handling lenses." },
-    { tip: "Keep a spare pair of glasses in case of eye irritation or infection — never push through discomfort with contacts in." },
-    { tip: "Avoid wearing contacts in swimming pools, hot tubs, or showers — waterborne bacteria can cause serious infections." },
-  ] : [];
+function qualityLabel(q: number | null | undefined): string {
+  if (q == null) return "—";
+  if (q >= 80) return "Excellent";
+  if (q >= 60) return "Good";
+  if (q >= 40) return "Fair";
+  return "Poor";
+}
 
-  const followUpDays = report.urgency === "high" || report.urgency === "critical" ? 30
-    : report.urgency === "moderate" ? 90 : 180;
+function axisConfLabel(conf: number | null | undefined): string {
+  if (conf == null) return "—";
+  if (conf >= 1.0) return "High (3/3 wins)";
+  if (conf >= 0.5) return "Medium (2/3 wins)";
+  return "Low (1/3 wins)";
+}
 
-  return { exercises, lubrication, correctionCare, followUpDays };
+function qualityColor(q: number | null | undefined): string {
+  if (q == null) return "#8098b8";
+  if (q >= 80) return "#2d7a4f";
+  if (q >= 60) return "#d4870a";
+  return "#c0392b";
+}
+
+function eyeTitle(eye: "left" | "right"): string {
+  return eye === "left" ? "Left Eye" : "Right Eye";
 }
 
 // ── Colours ───────────────────────────────────────────────────────────────────
@@ -143,17 +129,42 @@ const C = {
 
 // ── Gemini report generator ───────────────────────────────────────────────────
 
-async function generateReport(input: ExamInput): Promise<ExamReport> {
-  const systemPrompt = `You are an ophthalmology AI assistant. You generate structured eye screening reports based on self-reported exam data. You do not diagnose — you provide estimations and guidance only. Return ONLY valid JSON, no markdown or code fences.`;
-  const prompt = `Generate an eye screening report from this data:
-${JSON.stringify(input, null, 2)}
+function buildExamSummaryText(input: ExamInput): string {
+  const lines: string[] = [];
+  for (const side of ["left", "right"] as const) {
+    const e = input[side];
+    if (!e) continue;
+    const ref = e.refraction;
+    lines.push(`${eyeTitle(side)} eye:`);
+    lines.push(`  Axis: ${e.axis ?? "?"}°, Axis confidence: ${axisConfLabel(e.axisConf)}`);
+    lines.push(`  Quality score: ${e.quality ?? "?"}% (${qualityLabel(e.quality)})`);
+    lines.push(`  MDSF along-axis: ${fmtCpd(e.mdsf1)} → ${snellen(e.sn1)} Snellen`);
+    lines.push(`  MDSF perpendicular: ${fmtCpd(e.mdsf2)} → ${snellen(e.sn2)} Snellen`);
+    if (ref) {
+      lines.push(`  Refraction estimate: SPH ${fmtD(ref.sph)}, CYL ${fmtD(ref.cyl)}, AXIS ${ref.axis}°`);
+      lines.push(`  Far-point 1: ${fmtMm(e.fp1Mm)}, Far-point 2: ${fmtMm(e.fp2Mm)}`);
+      if (ref.note) lines.push(`  Note: ${ref.note}${ref.colorNote ?? ""}`);
+    } else {
+      lines.push("  Refraction: far-point step skipped");
+    }
+  }
+  return lines.join("\n");
+}
 
-The exam measured visual acuity and provided estimates for myopia, hyperopia, and astigmatism. Consider the patient's age, current correction (glasses/contacts/none), and previous conditions. List only refractive conditions (myopia, hyperopia, astigmatism) that are supported by the data. Phrase everything as estimations, not diagnoses.
+async function generateReport(input: ExamInput): Promise<ExamReport> {
+  const systemPrompt = `You are an ophthalmology AI assistant. You generate structured eye screening reports from raw optometric measurement data (MDSF gratings, far-point refraction, astigmatic axis). You do not diagnose — you provide estimations and guidance only. Return ONLY valid JSON, no markdown or code fences.`;
+
+  const summary = buildExamSummaryText(input);
+  const prompt = `Generate an eye screening report from these raw measurements:
+
+${summary}
+
+Interpret the Snellen acuity, refraction SPH/CYL values, and axis to identify possible refractive conditions (myopia, hyperopia, astigmatism). Phrase everything as estimates, not diagnoses. List only conditions supported by the data.
 
 Return this exact JSON (diagnoses array may have 0–3 items):
 {
   "summary": "2-3 sentence plain-language summary phrased as estimates and guidance, not diagnoses",
-  "diagnoses": [{ "condition": "name", "icd10": "code", "confidence": <0-100>, "estimatedRx": "optional estimated range e.g. Est. -1.75 D" }],
+  "diagnoses": [{ "condition": "name + affected eye", "icd10": "code", "confidence": <0-100>, "estimatedRx": "optional e.g. Est. -1.15 D sphere" }],
   "urgency": "low"|"moderate"|"high"|"critical",
   "urgencyReason": "one sentence guidance, not a diagnosis"
 }`;
@@ -177,19 +188,31 @@ Return this exact JSON (diagnoses array may have 0–3 items):
 // ── Narration script builder ──────────────────────────────────────────────────
 
 function buildNarrationScript(report: ExamReport, input: ExamInput): string[] {
-  const acuityNote = input.rightEyeAcuity !== "20/20" || input.leftEyeAcuity !== "20/20"
-    ? `Your right eye measured ${input.rightEyeAcuity} and your left eye ${input.leftEyeAcuity}. ${
-        input.rightEyeAcuity !== input.leftEyeAcuity
-          ? "There appears to be a difference between your two eyes, which is worth discussing with a professional."
-          : "Both eyes show the same acuity result."
-      }`
-    : "Both eyes appear to be within the 20/20 normal range based on this screening.";
+  const acuityParts: string[] = [];
+  for (const side of ["left", "right"] as const) {
+    const e = input[side];
+    if (!e) continue;
+    const sn = snellen(e.sn1);
+    acuityParts.push(`Your ${side} eye measured ${sn} visual acuity`);
+  }
+  const acuityNote = acuityParts.length
+    ? acuityParts.join("; ") + "."
+    : "Visual acuity data was not available for this session.";
+
+  const refractionParts: string[] = [];
+  for (const side of ["left", "right"] as const) {
+    const e = input[side];
+    if (!e?.refraction) continue;
+    const r = e.refraction;
+    refractionParts.push(
+      `${eyeTitle(side)} refraction estimate: SPH ${fmtD(r.sph)}, CYL ${fmtD(r.cyl)}, axis ${r.axis}°.`
+    );
+  }
 
   const conditionExplanations: Record<string, string> = {
     myopia: "Myopia, or nearsightedness, means distant objects appear blurry because the eyeball is slightly too long.",
     hyperopia: "Hyperopia, or farsightedness, means nearby objects may appear blurry because the eyeball is slightly shorter than normal.",
-    astigmatism: "Astigmatism means the cornea is slightly irregular in shape, causing blurry or distorted vision at any distance.",
-    presbyopia: "Presbyopia is an age-related change where the lens loses flexibility, making it harder to focus on close objects.",
+    astigmatism: "Astigmatism means the cornea is slightly irregular in shape, causing blurry or distorted vision at various distances.",
   };
 
   const diagnosisLines = report.diagnoses.slice(0, 2).flatMap((d, i) => {
@@ -197,26 +220,20 @@ function buildNarrationScript(report: ExamReport, input: ExamInput): string[] {
     const matchedKey = Object.keys(conditionExplanations).find(k => key.includes(k));
     const explanation = matchedKey ? conditionExplanations[matchedKey] : "";
     const prefix = i === 0
-      ? `The screening suggests a possible pattern consistent with ${d.condition}${d.estimatedRx ? `, with a rough estimate of ${d.estimatedRx}` : ""}. Confidence estimate: ${d.confidence} percent.`
+      ? `The screening suggests a pattern consistent with ${d.condition}${d.estimatedRx ? `, estimated at ${d.estimatedRx}` : ""}. Confidence: ${d.confidence} percent.`
       : `A secondary finding suggests possible ${d.condition}, at ${d.confidence} percent confidence.`;
     return explanation ? [prefix, explanation] : [prefix];
   });
 
-  const refractiveNote = [
-    input.myopiaEstimate && input.myopiaEstimate !== "None detected" ? `Myopia estimate: ${input.myopiaEstimate}.` : "",
-    input.hyperopiaEstimate && input.hyperopiaEstimate !== "None detected" ? `Hyperopia estimate: ${input.hyperopiaEstimate}.` : "",
-    input.astigmatismEstimate && input.astigmatismEstimate !== "None detected" ? `Astigmatism estimate: ${input.astigmatismEstimate}.` : "",
-  ].filter(Boolean).join(" ");
-
   return [
-    `Hi, I'm Iris. Here's a summary of your eye screening.`,
+    "Hi, I'm Iris. Here's a summary of your eye screening.",
     acuityNote,
-    refractiveNote ? `Refractive estimates: ${refractiveNote} These are approximations, not clinical prescriptions.` : "",
+    ...refractionParts,
     ...diagnosisLines,
     diagnosisLines.length === 0 ? "No significant refractive patterns were detected." : "",
     report.summary,
     report.urgencyReason,
-    `Please consult a licensed eye care professional for a full evaluation.`,
+    "Please consult a licensed eye care professional for a full evaluation.",
   ].filter(Boolean);
 }
 
@@ -437,6 +454,15 @@ export default function ReportPage() {
 
   const handleBack = () => {
     stop();
+    sessionStorage.setItem("irisIntroSeen", "1");
+    setPageExiting(true);
+    setTimeout(() => router.push("/"), 380);
+  };
+
+  const handleFindDoctor = () => {
+    stop();
+    sessionStorage.setItem("irisIntroSeen", "1");
+    sessionStorage.setItem("irisOpenDoctor", "1");
     setPageExiting(true);
     setTimeout(() => router.push("/"), 380);
   };
@@ -649,16 +675,14 @@ export default function ReportPage() {
           <div className="report-header-inner">
             <div>
               <button onClick={handleBack} style={{
-                display: "inline-flex", alignItems: "center", gap: 6,
-                background: "none", border: "none", cursor: "pointer",
-                color: "rgba(255,255,255,0.45)", fontFamily: "'DM Mono'", fontSize: 11, letterSpacing: 1,
-                padding: "0 0 12px 0", transition: "color 0.18s",
-              }}
-                onMouseEnter={e => (e.currentTarget.style.color = "rgba(255,255,255,0.85)")}
-                onMouseLeave={e => (e.currentTarget.style.color = "rgba(255,255,255,0.45)")}
-              >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <polyline points="15 18 9 12 15 6"/>
+                display: "inline-flex", alignItems: "center", gap: 8, marginBottom: 14,
+                background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.14)",
+                borderRadius: 10, cursor: "pointer",
+                color: "rgba(255,255,255,0.75)", fontFamily: "'DM Mono', monospace", fontSize: 11, letterSpacing: 1,
+                padding: "7px 14px",
+              }}>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M19 12H5M12 19l-7-7 7-7"/>
                 </svg>
                 HOME
               </button>
@@ -675,12 +699,23 @@ export default function ReportPage() {
               </div>
             </div>
             <div className="report-header-stats">
-              {[["Age", `${input?.age} yrs`], ["Correction", input?.wearsCorrection === "none" ? "None" : input?.wearsCorrection === "glasses" ? "Glasses" : "Contacts"], ["Right Eye", input?.rightEyeAcuity ?? "—"], ["Left Eye", input?.leftEyeAcuity ?? "—"]].map(([k, v]) => (
-                <div key={k} style={{ textAlign: "center" }}>
-                  <div style={{ fontFamily: "'DM Mono'", fontSize: 10, color: "rgba(255,255,255,0.5)", letterSpacing: 1, marginBottom: 4 }}>{k}</div>
-                  <div style={{ fontFamily: "'Bebas Neue'", fontSize: 28, color: C.cream, lineHeight: 1 }}>{v}</div>
-                </div>
-              ))}
+              {(["right", "left"] as const).map(side => {
+                const e = input?.[side];
+                const sph = e?.refraction?.sph;
+                return (
+                  <div key={side} style={{ textAlign: "center" }}>
+                    <div style={{ fontFamily: "'DM Mono'", fontSize: 10, color: "rgba(255,255,255,0.5)", letterSpacing: 1, marginBottom: 4 }}>
+                      {side.toUpperCase()} EYE
+                    </div>
+                    <div style={{ fontFamily: "'Bebas Neue'", fontSize: 26, color: C.cream, lineHeight: 1 }}>
+                      {snellen(e?.sn1)}
+                    </div>
+                    <div style={{ fontFamily: "'DM Mono'", fontSize: 9, color: "rgba(255,255,255,0.35)", marginTop: 3 }}>
+                      {sph != null ? fmtD(sph) : e ? "no refraction" : "not tested"}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
         </div>
@@ -690,56 +725,80 @@ export default function ReportPage() {
 
           {/* LEFT sidebar */}
           <div className="fade-up report-sidebar" style={{ background: "#e8eef8" }}>
-
-            {/* Exam Summary stats */}
-            <div style={{ fontFamily: "'DM Mono'", fontSize: 10, color: "#4a6280", letterSpacing: 1, textTransform: "uppercase", marginBottom: 20 }}>Exam Summary</div>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
-              {[
-                ["Age", `${input?.age ?? "—"} yrs`],
-                ["Correction", input?.wearsCorrection === "none" ? "None" : input?.wearsCorrection === "glasses" ? "Glasses" : "Contacts"],
-              ].map(([label, value]) => (
-                <div key={label} style={{ background: "#fff", borderRadius: 10, padding: "12px 14px", border: "1px solid #ccd8ee" }}>
-                  <div style={{ fontFamily: "'DM Mono'", fontSize: 9, color: "#8098b8", letterSpacing: 1, marginBottom: 5 }}>{label}</div>
-                  <div style={{ fontFamily: "'DM Sans'", fontSize: 14, fontWeight: 600, color: "#0d1b2e" }}>{value}</div>
-                </div>
-              ))}
-            </div>
-            <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 12 }}>
-              {[
-                ["Myopia", input?.myopiaEstimate ?? "—"],
-                ["Hyperopia", input?.hyperopiaEstimate ?? "—"],
-                ["Astigmatism", input?.astigmatismEstimate ?? "—"],
-              ].map(([label, value]) => (
-                <div key={label} style={{ background: "#fff", borderRadius: 10, padding: "10px 14px", border: "1px solid #ccd8ee", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                  <div style={{ fontFamily: "'DM Mono'", fontSize: 9, color: "#8098b8", letterSpacing: 1 }}>{label}</div>
-                  <div style={{ fontFamily: "'DM Sans'", fontSize: 12, fontWeight: 600, color: value === "None detected" ? C.green : "#0d1b2e" }}>{value}</div>
-                </div>
-              ))}
-            </div>
-            {input?.previousEyeConditions && input.previousEyeConditions !== "None" && (
-              <div style={{ background: "#fff", borderRadius: 10, padding: "12px 14px", border: "1px solid #ccd8ee", marginBottom: 12 }}>
-                <div style={{ fontFamily: "'DM Mono'", fontSize: 9, color: "#8098b8", letterSpacing: 1, marginBottom: 5 }}>Previous Conditions</div>
-                <div style={{ fontFamily: "'DM Sans'", fontSize: 13, color: "#0d1b2e", lineHeight: 1.5 }}>{input.previousEyeConditions}</div>
-              </div>
-            )}
-
-            {/* Divider */}
-            <div style={{ borderTop: "1px solid #ccd8ee", marginBottom: 32 }} />
-
-            {/* Visual Acuity */}
-            <div style={{ fontFamily: "'DM Mono'", fontSize: 10, color: "#4a6280", letterSpacing: 1, textTransform: "uppercase", marginBottom: 6 }}>Visual Acuity</div>
-            <div style={{ fontFamily: "'DM Mono'", fontSize: 9, color: "#8098b8", marginBottom: 20, lineHeight: 1.5 }}>Measured distance vision — 20/20 is standard.</div>
-            {[["Right Eye", input?.rightEyeAcuity ?? "—"], ["Left Eye", input?.leftEyeAcuity ?? "—"]].map(([eye, val]) => {
-              const isNormal = val === "20/20";
+            <div style={{ fontFamily: "'DM Mono'", fontSize: 10, color: "#4a6280", letterSpacing: 1, textTransform: "uppercase", marginBottom: 16 }}>Visual Acuity</div>
+            <div style={{ fontFamily: "'DM Mono'", fontSize: 9, color: "#8098b8", marginBottom: 16, lineHeight: 1.5 }}>Snellen acuity from MDSF grating test. 20/20 is the clinical standard.</div>
+            {(["right", "left"] as const).map(side => {
+              const e = input?.[side];
+              const sn = e?.sn1;
+              const isNormal = sn != null && sn <= 20;
+              const pct = sn != null ? Math.max(10, Math.min(100, Math.round((20 / sn) * 100))) : 0;
+              const acuityColor = isNormal ? C.green : sn != null && sn <= 40 ? C.amber : C.red;
               return (
-                <div key={eye} style={{ marginBottom: 20 }}>
+                <div key={side} style={{ marginBottom: 20 }}>
                   <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
-                    <span style={{ fontSize: 13, color: "#0d1b2e" }}>{eye}</span>
-                    <span style={{ fontFamily: "'Bebas Neue'", fontSize: 22, color: isNormal ? C.green : C.amber }}>{val}</span>
+                    <span style={{ fontSize: 13, color: "#0d1b2e" }}>{eyeTitle(side)}</span>
+                    <span style={{ fontFamily: "'Bebas Neue'", fontSize: 22, color: e ? acuityColor : "#8098b8" }}>
+                      {snellen(sn)}
+                    </span>
                   </div>
                   <div style={{ height: 4, background: "#ccd8ee", borderRadius: 2, overflow: "hidden" }}>
-                    <div style={{ height: "100%", background: isNormal ? C.green : C.amber, borderRadius: 2, width: isNormal ? "100%" : "50%", transition: "width 1.2s ease" }} />
+                    <div style={{ height: "100%", background: e ? acuityColor : "#ccd8ee", borderRadius: 2, width: e ? `${pct}%` : "0%", transition: "width 1.2s ease" }} />
                   </div>
+                  {!e && (
+                    <div style={{ fontFamily: "'DM Mono'", fontSize: 9, color: "#8098b8", marginTop: 4 }}>Not tested</div>
+                  )}
+                </div>
+              );
+            })}
+
+            <div style={{ borderTop: "1px solid #ccd8ee", margin: "20px 0" }} />
+
+            {/* Per-eye quality */}
+            <div style={{ fontFamily: "'DM Mono'", fontSize: 10, color: "#4a6280", letterSpacing: 1, textTransform: "uppercase", marginBottom: 14 }}>Scan Quality</div>
+            {(["right", "left"] as const).map(side => {
+              const e = input?.[side];
+              if (!e) return null;
+              const q = e.quality;
+              const qPct = q ?? 0;
+              const qColor = qualityColor(q);
+              return (
+                <div key={side} style={{ marginBottom: 16 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
+                    <span style={{ fontSize: 12, color: "#0d1b2e" }}>{eyeTitle(side)}</span>
+                    <span style={{ fontFamily: "'DM Mono'", fontSize: 11, color: qColor, fontWeight: 600 }}>
+                      {q ?? "—"}% <span style={{ opacity: 0.7 }}>({qualityLabel(q)})</span>
+                    </span>
+                  </div>
+                  <div style={{ height: 4, background: "#ccd8ee", borderRadius: 2, overflow: "hidden" }}>
+                    <div style={{ height: "100%", background: qColor, borderRadius: 2, width: `${qPct}%`, transition: "width 1.2s ease" }} />
+                  </div>
+                </div>
+              );
+            })}
+
+            <div style={{ borderTop: "1px solid #ccd8ee", margin: "20px 0" }} />
+
+            {/* Refraction summary */}
+            <div style={{ fontFamily: "'DM Mono'", fontSize: 10, color: "#4a6280", letterSpacing: 1, textTransform: "uppercase", marginBottom: 14 }}>Refraction</div>
+            {(["right", "left"] as const).map(side => {
+              const e = input?.[side];
+              if (!e) return null;
+              const ref = e.refraction;
+              return (
+                <div key={side} style={{ background: "#fff", borderRadius: 10, padding: "12px 14px", border: "1px solid #ccd8ee", marginBottom: 10 }}>
+                  <div style={{ fontFamily: "'DM Mono'", fontSize: 9, color: "#8098b8", letterSpacing: 1, marginBottom: 8 }}>{side.toUpperCase()} EYE</div>
+                  {ref ? (
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 6 }}>
+                      {[["SPH", fmtD(ref.sph)], ["CYL", fmtD(ref.cyl)], [`${ref.axis}°`, "AXIS"]].map(([val, lbl]) => (
+                        <div key={lbl} style={{ textAlign: "center" }}>
+                          <div style={{ fontFamily: "'Bebas Neue'", fontSize: 16, color: "#0d1b2e", lineHeight: 1 }}>{val}</div>
+                          <div style={{ fontFamily: "'DM Mono'", fontSize: 8, color: "#8098b8", marginTop: 2 }}>{lbl}</div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div style={{ fontFamily: "'DM Mono'", fontSize: 10, color: "#8098b8" }}>Far-point step skipped</div>
+                  )}
                 </div>
               );
             })}
@@ -747,6 +806,93 @@ export default function ReportPage() {
 
           {/* RIGHT main content */}
           <div className="fade-up report-content">
+
+            {/* ── Raw measurement data cards ── */}
+            {(["right", "left"] as const).map(side => {
+              const e = input?.[side];
+              if (!e) return null;
+              const ref = e.refraction;
+              const confColor = (e.axisConf ?? 0) >= 1.0 ? C.green : (e.axisConf ?? 0) >= 0.5 ? C.amber : C.red;
+              const qc = qualityColor(e.quality);
+              return (
+                <div key={side}>
+                  <div style={{ fontFamily: "'DM Mono'", fontSize: 10, color: "#4a6280", letterSpacing: 2, textTransform: "uppercase", marginBottom: 12 }}>
+                    {eyeTitle(side)} — Measurement Data
+                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 10, marginBottom: 20 }}>
+
+                    {/* Eye overview card */}
+                    <div style={{ background: "#fff", borderRadius: 12, padding: "14px 16px", border: "1px solid #ccd8ee" }}>
+                      <div style={{ fontFamily: "'DM Mono'", fontSize: 9, color: "#8098b8", letterSpacing: 1, marginBottom: 10, textTransform: "uppercase" }}>{side.toUpperCase()} EYE</div>
+                      {[
+                        ["Axis", `${e.axis ?? "?"}°`],
+                        ["Axis conf.", axisConfLabel(e.axisConf)],
+                        ["Quality", `${e.quality ?? "?"}% (${qualityLabel(e.quality)})`],
+                      ].map(([label, value]) => (
+                        <div key={label} style={{ display: "flex", justifyContent: "space-between", marginBottom: 6, alignItems: "baseline" }}>
+                          <span style={{ fontFamily: "'DM Mono'", fontSize: 10, color: "#8098b8" }}>{label}</span>
+                          <span style={{ fontFamily: "'DM Sans'", fontSize: 11, fontWeight: 600,
+                            color: label === "Axis conf." ? confColor : label === "Quality" ? qc : "#0d1b2e" }}>
+                            {value}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* MDSF Along Axis */}
+                    <div style={{ background: "#fff", borderRadius: 12, padding: "14px 16px", border: "1px solid #ccd8ee" }}>
+                      <div style={{ fontFamily: "'DM Mono'", fontSize: 9, color: "#8098b8", letterSpacing: 1, marginBottom: 10, textTransform: "uppercase" }}>MDSF Along Axis</div>
+                      {[["CPD", fmtCpd(e.mdsf1)], ["Snellen", snellen(e.sn1)]].map(([label, value]) => (
+                        <div key={label} style={{ display: "flex", justifyContent: "space-between", marginBottom: 6, alignItems: "baseline" }}>
+                          <span style={{ fontFamily: "'DM Mono'", fontSize: 10, color: "#8098b8" }}>{label}</span>
+                          <span style={{ fontFamily: "'DM Sans'", fontSize: 11, fontWeight: 700, color: "#0d1b2e" }}>{value}</span>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* MDSF Perp */}
+                    <div style={{ background: "#fff", borderRadius: 12, padding: "14px 16px", border: "1px solid #ccd8ee" }}>
+                      <div style={{ fontFamily: "'DM Mono'", fontSize: 9, color: "#8098b8", letterSpacing: 1, marginBottom: 10, textTransform: "uppercase" }}>MDSF Perp.</div>
+                      {[["CPD", fmtCpd(e.mdsf2)], ["Snellen", snellen(e.sn2)]].map(([label, value]) => (
+                        <div key={label} style={{ display: "flex", justifyContent: "space-between", marginBottom: 6, alignItems: "baseline" }}>
+                          <span style={{ fontFamily: "'DM Mono'", fontSize: 10, color: "#8098b8" }}>{label}</span>
+                          <span style={{ fontFamily: "'DM Sans'", fontSize: 11, fontWeight: 700, color: "#0d1b2e" }}>{value}</span>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Refraction Est. */}
+                    <div style={{ background: "#fff", borderRadius: 12, padding: "14px 16px", border: "1px solid #ccd8ee" }}>
+                      <div style={{ fontFamily: "'DM Mono'", fontSize: 9, color: "#8098b8", letterSpacing: 1, marginBottom: 10, textTransform: "uppercase" }}>Refraction Est.</div>
+                      {ref ? (
+                        <>
+                          {[
+                            ["SPH", fmtD(ref.sph)],
+                            ["CYL", fmtD(ref.cyl)],
+                            ["AXIS", `${ref.axis}°`],
+                            ["FP1", fmtMm(e.fp1Mm)],
+                            ["FP2", fmtMm(e.fp2Mm)],
+                          ].map(([label, value]) => (
+                            <div key={label} style={{ display: "flex", justifyContent: "space-between", marginBottom: 4, alignItems: "baseline" }}>
+                              <span style={{ fontFamily: "'DM Mono'", fontSize: 10, color: "#8098b8" }}>{label}</span>
+                              <span style={{ fontFamily: "'DM Sans'", fontSize: 11, fontWeight: 700, color: "#0d1b2e" }}>{value}</span>
+                            </div>
+                          ))}
+                          {ref.note && (
+                            <div style={{ fontFamily: "'DM Mono'", fontSize: 8, color: C.amber, marginTop: 6, lineHeight: 1.4 }}>
+                              {ref.note}{ref.colorNote}
+                            </div>
+                          )}
+                        </>
+                      ) : (
+                        <div style={{ fontFamily: "'DM Mono'", fontSize: 10, color: "#8098b8" }}>Far-point step skipped</div>
+                      )}
+                    </div>
+
+                  </div>
+                </div>
+              );
+            })}
 
             {/* AI Summary */}
             <div>
@@ -838,7 +984,7 @@ export default function ReportPage() {
               <p style={{ fontSize: 14, color: "#4a6280", lineHeight: 1.7, maxWidth: 600 }}>{report.urgencyReason} This screening provides estimates only — it is not a clinical diagnosis. We recommend booking a full exam with a licensed ophthalmologist.</p>
             </div>
             <div className="report-footer-buttons">
-              <button className="report-footer-btn-primary" style={{ background: `linear-gradient(135deg, ${C.brand}, #007a87)` }}>
+              <button className="report-footer-btn-primary" style={{ background: `linear-gradient(135deg, ${C.brand}, #007a87)` }} onClick={handleFindDoctor}>
                 Find Eye Doctor
               </button>
               <button className="report-footer-btn-secondary" onClick={() => router.push("/care-plan")}>

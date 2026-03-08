@@ -207,142 +207,246 @@ function EyesExamPanel() {
   );
 }
 
-// ── 2: Report ─────────────────────────────────────────────────────────────────
+// ── 2: Report hub ─────────────────────────────────────────────────────────────
+
+const BRAND = "#00c4d4";
+
 function ReportPanel() {
-  const [exams, setExams]     = useState(null);
-  const [error, setError]     = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [tab, setTab]                   = useState("disease");
+  const [diseaseHistory, setDiseaseHistory] = useState(null);
+  const [screeningReport, setScreeningReport] = useState(null);
+  const [screeningInput, setScreeningInput]   = useState(null);
+  const [loading, setLoading]           = useState(true);
+  const [loggedIn, setLoggedIn]         = useState(false);
 
   useEffect(() => {
-    const token = sessionStorage.getItem("token");
-    if (!token) { setError("Please log in to view your reports."); setLoading(false); return; }
-    fetch(`/api/get-exams?token=${encodeURIComponent(token)}`)
-      .then(r => r.json())
-      .then(d => {
-        if (d.success) setExams(d.exams);
-        else setError(d.error || "Failed to load.");
-      })
-      .catch(() => setError("Network error."))
-      .finally(() => setLoading(false));
+    const load = async () => {
+      const token = sessionStorage.getItem("token");
+      setLoggedIn(!!token);
+
+      // Disease detection history (requires auth)
+      if (token) {
+        try {
+          const res = await fetch(`/api/eye-diagnostic/history?t=${Date.now()}`, {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          const data = res.ok ? await res.json() : {};
+          setDiseaseHistory(Array.isArray(data.history) ? data.history : []);
+        } catch { setDiseaseHistory([]); }
+      } else {
+        setDiseaseHistory([]);
+      }
+
+      // Screening report (localStorage)
+      try {
+        const rawReport = localStorage.getItem("irisExamReport");
+        const rawInput  = localStorage.getItem("irisExamResults");
+        if (rawReport) setScreeningReport(JSON.parse(rawReport));
+        if (rawInput)  setScreeningInput(JSON.parse(rawInput));
+      } catch {}
+
+      setLoading(false);
+    };
+    load();
   }, []);
 
-  if (loading) return (
-    <div style={{ display:"flex", alignItems:"center", justifyContent:"center", height:"100%", color:"#555" }}>
-      Loading reports…
-    </div>
-  );
+  const openDiseaseReport = (item) => {
+    const payload = {
+      result: String(item.likely_disease || "").toLowerCase() === "normal" ? "normal" : "condition_detected",
+      conditionName: item.likely_disease || undefined,
+      confidence: parseFloat(item.confidence) || undefined,
+      affectedEye: "both",
+      imageDate: item.createdAt,
+    };
+    localStorage.setItem("irisDetectionResults", JSON.stringify(payload));
+    sessionStorage.setItem("irisIntroSeen", "1");
+    window.location.href = "/report/disease";
+  };
 
-  if (error) return (
-    <div style={{ display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center",
-      height:"100%", gap:16, color:"#aaa", textAlign:"center", padding:"0 40px" }}>
-      <div style={{ fontSize:48 }}>📋</div>
-      <p>{error}</p>
-      {error.includes("log in") && (
-        <ActionButton onClick={() => window.location.href = "/"}>
-          Go to Login
-        </ActionButton>
-      )}
-    </div>
-  );
+  const openScreeningReport = () => {
+    sessionStorage.setItem("irisIntroSeen", "1");
+    window.location.href = "/report/screening";
+  };
 
-  if (!exams.length) return (
-    <div style={{ display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center",
-      height:"100%", gap:20, color:"#aaa", textAlign:"center", padding:"0 40px" }}>
-      <div style={{ fontSize:64 }}>📋</div>
-      <h2 style={{ color:"#fff", fontSize:28, fontWeight:700, margin:0 }}>No exams yet</h2>
-      <p>Complete your first screening to see results here.</p>
-      <ActionButton onClick={() => { window.location.href = "/astig"; }}>
-        Take Exam Now →
-      </ActionButton>
-    </div>
-  );
+  const tabs = [
+    { id: "disease",   label: "Disease Detection", color: BRAND },
+    { id: "screening", label: "Eye Screening",      color: "#60c8f5" },
+  ];
 
   return (
-    <div style={{ height:"100%", overflowY:"auto", padding:"24px 32px" }}>
+    <div style={{ height:"100%", overflowY:"auto", padding:"32px 36px" }}>
+      <style>{`@import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500;600&display=swap');`}</style>
       <div style={{ maxWidth:860, margin:"0 auto" }}>
-        <h2 style={{ color:"#fff", fontSize:22, fontWeight:700, marginBottom:20 }}>Your Exam History</h2>
-        <div style={{ display:"flex", flexDirection:"column", gap:14 }}>
-          {exams.map(exam => <ExamCard key={exam._id} exam={exam} />)}
+
+        {/* Header */}
+        <div style={{ marginBottom:28 }}>
+          <div style={{ fontFamily:"'Bebas Neue', sans-serif", fontSize:32, letterSpacing:4, color:"#fff", lineHeight:1 }}>Reports</div>
+          <div style={{ fontFamily:"'DM Mono', monospace", fontSize:10, color:"rgba(255,255,255,0.35)", letterSpacing:2, marginTop:4 }}>YOUR IRIS HEALTH HISTORY</div>
         </div>
+
+        {/* Tabs */}
+        <div style={{ display:"flex", gap:8, marginBottom:28 }}>
+          {tabs.map(t => (
+            <button
+              key={t.id}
+              onClick={() => setTab(t.id)}
+              style={{
+                padding:"8px 20px", borderRadius:10, border:"none", cursor:"pointer",
+                fontFamily:"'DM Mono', monospace", fontSize:11, letterSpacing:1,
+                background: tab === t.id ? t.color : "rgba(255,255,255,0.07)",
+                color: tab === t.id ? "#000" : "rgba(255,255,255,0.5)",
+                transition:"all 0.18s",
+              }}
+            >
+              {t.label.toUpperCase()}
+            </button>
+          ))}
+        </div>
+
+        {/* Loading */}
+        {loading && (
+          <div style={{ display:"flex", justifyContent:"center", padding:60 }}>
+            <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke={BRAND} strokeWidth="1.5" style={{ animation:"spin 1.5s linear infinite" }}>
+              <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>
+            </svg>
+            <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+          </div>
+        )}
+
+        {/* ── Disease Detection tab ── */}
+        {!loading && tab === "disease" && (
+          diseaseHistory.length === 0 ? (
+            <EmptyReportState
+              icon={<svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke={BRAND} strokeWidth="1.3"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/><path d="M11 8v6M8 11h6"/></svg>}
+              title="No disease detection reports"
+              desc={loggedIn ? "Upload an eye image to run your first detection." : "Log in to see your detection history."}
+              actionLabel={loggedIn ? "Run Detection →" : "Log In"}
+              onAction={() => { window.location.href = loggedIn ? "/" : "/"; }}
+            />
+          ) : (
+            <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
+              {diseaseHistory.map((item, i) => (
+                <DiseaseReportCard key={item.id || i} item={item} onClick={() => openDiseaseReport(item)} />
+              ))}
+            </div>
+          )
+        )}
+
+        {/* ── Eye Screening tab ── */}
+        {!loading && tab === "screening" && (
+          !screeningReport ? (
+            <EmptyReportState
+              icon={<svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#60c8f5" strokeWidth="1.3"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>}
+              title="No screening report yet"
+              desc="Complete an eye screening to generate your first screening report."
+              actionLabel="Take Exam →"
+              onAction={() => { window.location.href = "/astig"; }}
+            />
+          ) : (
+            <ScreeningReportCard report={screeningReport} input={screeningInput} onClick={openScreeningReport} />
+          )
+        )}
+
       </div>
     </div>
   );
 }
 
-function ExamCard({ exam }) {
-  const [open, setOpen] = useState(false);
-  const date = new Date(exam.createdAt).toLocaleDateString("en-US", {
-    year:"numeric", month:"short", day:"numeric", hour:"2-digit", minute:"2-digit",
-  });
-  const eye  = exam.testedEye ? exam.testedEye.charAt(0).toUpperCase() + exam.testedEye.slice(1) : "—";
-  const ref  = exam.refraction;
-  const q    = exam.quality ?? "—";
-  const qColor = q >= 80 ? "#00FF88" : q >= 60 ? "#FFD700" : "#FF4444";
+function EmptyReportState({ icon, title, desc, actionLabel, onAction }) {
+  return (
+    <div style={{ display:"flex", flexDirection:"column", alignItems:"center", textAlign:"center", padding:"60px 40px", gap:16 }}>
+      <div style={{ width:72, height:72, borderRadius:"50%", background:"rgba(255,255,255,0.04)", border:"1px solid rgba(255,255,255,0.08)", display:"flex", alignItems:"center", justifyContent:"center" }}>
+        {icon}
+      </div>
+      <div style={{ fontFamily:"'DM Sans', sans-serif", fontSize:17, fontWeight:600, color:"rgba(255,255,255,0.7)" }}>{title}</div>
+      <div style={{ fontFamily:"'DM Sans', sans-serif", fontSize:13, color:"rgba(255,255,255,0.35)", maxWidth:340, lineHeight:1.65 }}>{desc}</div>
+      <button
+        onClick={onAction}
+        style={{ marginTop:8, padding:"10px 24px", background:BRAND, border:"none", borderRadius:10, cursor:"pointer", fontFamily:"'Bebas Neue', sans-serif", fontSize:16, letterSpacing:2, color:"#fff" }}
+      >
+        {actionLabel}
+      </button>
+    </div>
+  );
+}
+
+function DiseaseReportCard({ item, onClick }) {
+  const date   = new Date(item.createdAt).toLocaleDateString("en-US", { year:"numeric", month:"short", day:"numeric" });
+  const isNormal = String(item.likely_disease || "").toLowerCase() === "normal";
+  const conf   = parseFloat(item.confidence);
+  const confPct = Number.isFinite(conf) ? `${Math.round(conf)}%` : item.confidence || "—";
+  const statusColor = isNormal ? "#22d46a" : "#f5a623";
 
   return (
     <motion.div
-      layout
-      style={{ background:"rgba(255,255,255,0.04)", border:"1px solid rgba(255,255,255,0.1)",
-        borderRadius:14, overflow:"hidden", cursor:"pointer" }}
-      onClick={() => setOpen(o => !o)}
+      whileHover={{ scale:1.012, boxShadow:"0 8px 32px rgba(0,0,0,0.3)" }}
+      onClick={onClick}
+      style={{ background:"rgba(255,255,255,0.04)", border:"1px solid rgba(255,255,255,0.09)", borderRadius:16, padding:"20px 24px", cursor:"pointer", display:"flex", alignItems:"center", gap:18, transition:"border-color 0.2s" }}
     >
-      {/* Summary row */}
-      <div style={{ display:"flex", alignItems:"center", gap:16, padding:"14px 20px", flexWrap:"wrap" }}>
-        <span style={{ fontSize:22 }}>👁</span>
-        <div style={{ flex:1 }}>
-          <div style={{ color:"#fff", fontWeight:700, fontSize:14 }}>{eye} Eye — {date}</div>
-          <div style={{ color:"#666", fontSize:12, marginTop:2 }}>
-            Axis {exam.axis ?? "?"}° · MDSF {exam.mdsf1?.toFixed(1)} / {exam.mdsf2?.toFixed(1)} CPD
-          </div>
-        </div>
-        <div style={{ display:"flex", gap:12, alignItems:"center" }}>
-          <span style={{ color: qColor, fontWeight:700, fontSize:13 }}>Quality {q}%</span>
-          {ref && (
-            <span style={{ background:"rgba(0,255,136,0.1)", border:"1px solid rgba(0,255,136,0.3)",
-              borderRadius:8, padding:"4px 10px", fontSize:12, color:"#00FF88", fontWeight:600 }}>
-              SPH {ref.sph}D / CYL {ref.cyl}D
-            </span>
-          )}
-          <span style={{ color:"#444", fontSize:16 }}>{open ? "▲" : "▼"}</span>
-        </div>
+      <div style={{ width:44, height:44, borderRadius:12, background:`${statusColor}18`, border:`1px solid ${statusColor}40`, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={statusColor} strokeWidth="1.5">
+          <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>
+        </svg>
       </div>
-
-      {/* Expanded details */}
-      <AnimatePresence>
-        {open && (
-          <motion.div
-            initial={{ height:0, opacity:0 }}
-            animate={{ height:"auto", opacity:1 }}
-            exit={{ height:0, opacity:0 }}
-            transition={{ duration:0.25 }}
-            style={{ overflow:"hidden" }}
-          >
-            <div style={{ padding:"0 20px 16px", display:"flex", gap:16, flexWrap:"wrap" }}>
-              {[
-                ["Axis", `${exam.axis ?? "?"}°`],
-                ["MDSF 1", `${exam.mdsf1?.toFixed(2)} CPD`],
-                ["MDSF 2", `${exam.mdsf2?.toFixed(2)} CPD`],
-                ["Snellen 1", `20/${exam.sn1}`],
-                ["Snellen 2", `20/${exam.sn2}`],
-                ["Far-Point 1", exam.fp1Mm ? `${(exam.fp1Mm/10).toFixed(1)} cm` : "skipped"],
-                ["Far-Point 2", exam.fp2Mm ? `${(exam.fp2Mm/10).toFixed(1)} cm` : "skipped"],
-                ref && ["SPH", `${ref.sph} D`],
-                ref && ["CYL", `${ref.cyl} D`],
-                ref && ["AXIS", `${ref.axis}°`],
-              ].filter(Boolean).map(([label, val]) => (
-                <div key={label} style={{ background:"rgba(255,255,255,0.05)", borderRadius:8,
-                  padding:"8px 14px", minWidth:100 }}>
-                  <div style={{ color:"#555", fontSize:10, letterSpacing:"0.1em", marginBottom:2 }}>{label}</div>
-                  <div style={{ color:"#fff", fontWeight:700, fontSize:14 }}>{val}</div>
-                </div>
-              ))}
-              {ref?.note && (
-                <div style={{ width:"100%", color:"#FFD700", fontSize:12, marginTop:4 }}>{ref.note}</div>
-              )}
-            </div>
-          </motion.div>
+      <div style={{ flex:1, minWidth:0 }}>
+        <div style={{ fontFamily:"'DM Sans', sans-serif", fontSize:15, fontWeight:600, color:"#fff", marginBottom:4 }}>
+          {isNormal ? "No Condition Detected" : (item.likely_disease || "Condition Detected")}
+        </div>
+        <div style={{ display:"flex", gap:12, flexWrap:"wrap" }}>
+          <span style={{ fontFamily:"'DM Mono', monospace", fontSize:10, color:"rgba(255,255,255,0.35)", letterSpacing:0.5 }}>{date}</span>
+          {!isNormal && <span style={{ fontFamily:"'DM Mono', monospace", fontSize:10, color:statusColor, letterSpacing:0.5 }}>Confidence {confPct}</span>}
+        </div>
+        {item.visible_findings?.length > 0 && (
+          <div style={{ marginTop:8, display:"flex", gap:6, flexWrap:"wrap" }}>
+            {item.visible_findings.slice(0,3).map((f, i) => (
+              <span key={i} style={{ fontFamily:"'DM Mono', monospace", fontSize:9, background:"rgba(255,255,255,0.06)", border:"1px solid rgba(255,255,255,0.1)", borderRadius:5, padding:"2px 8px", color:"rgba(255,255,255,0.45)", letterSpacing:0.5 }}>{f}</span>
+            ))}
+          </div>
         )}
-      </AnimatePresence>
+      </div>
+      <div style={{ color:"rgba(255,255,255,0.25)", flexShrink:0 }}>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 18l6-6-6-6"/></svg>
+      </div>
+    </motion.div>
+  );
+}
+
+function ScreeningReportCard({ report, input, onClick }) {
+  const topDiag  = report?.diagnoses?.[0];
+  const urgency  = report?.urgency ?? "low";
+  const urgColor = urgency === "critical" ? "#ef4444" : urgency === "high" ? "#f5a623" : urgency === "moderate" ? "#facc15" : "#22d46a";
+  const date     = input ? "Latest screening" : "Screening report";
+
+  return (
+    <motion.div
+      whileHover={{ scale:1.012, boxShadow:"0 8px 32px rgba(0,0,0,0.3)" }}
+      onClick={onClick}
+      style={{ background:"rgba(255,255,255,0.04)", border:"1px solid rgba(255,255,255,0.09)", borderRadius:16, padding:"20px 24px", cursor:"pointer", display:"flex", alignItems:"center", gap:18 }}
+    >
+      <div style={{ width:44, height:44, borderRadius:12, background:"rgba(96,200,245,0.12)", border:"1px solid rgba(96,200,245,0.3)", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#60c8f5" strokeWidth="1.5">
+          <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>
+        </svg>
+      </div>
+      <div style={{ flex:1, minWidth:0 }}>
+        <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:4, flexWrap:"wrap" }}>
+          <span style={{ fontFamily:"'DM Sans', sans-serif", fontSize:15, fontWeight:600, color:"#fff" }}>{date}</span>
+          <span style={{ fontFamily:"'DM Mono', monospace", fontSize:9, background:`${urgColor}18`, border:`1px solid ${urgColor}40`, borderRadius:5, padding:"2px 8px", color:urgColor, letterSpacing:1 }}>{urgency.toUpperCase()}</span>
+        </div>
+        {topDiag && (
+          <div style={{ fontFamily:"'DM Mono', monospace", fontSize:10, color:"rgba(255,255,255,0.4)", letterSpacing:0.5 }}>
+            {topDiag.condition} · {topDiag.confidence}% confidence
+          </div>
+        )}
+        {report?.summary && (
+          <div style={{ fontFamily:"'DM Sans', sans-serif", fontSize:12, color:"rgba(255,255,255,0.35)", marginTop:6, lineHeight:1.5, overflow:"hidden", display:"-webkit-box", WebkitLineClamp:2, WebkitBoxOrient:"vertical" }}>
+            {report.summary}
+          </div>
+        )}
+      </div>
+      <div style={{ color:"rgba(255,255,255,0.25)", flexShrink:0 }}>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 18l6-6-6-6"/></svg>
+      </div>
     </motion.div>
   );
 }
@@ -370,32 +474,36 @@ export default function PanelOverlay({ panelIndex, originRect, onClose }) {
       animate={{ top: 0, left: 0, width: "100vw", height: "100vh", borderRadius: 0, opacity: 1 }}
       exit={{ ...from, opacity: 0 }}
       transition={{ duration: 0.45, ease: [0.32, 0.72, 0, 1] }}
-      style={{ position:"fixed", zIndex:150, background:"#0a0a0a",
+      style={{ position:"fixed", zIndex:500, background:"#0a0a0a",
         display:"flex", flexDirection:"column", overflow:"hidden" }}
     >
-      {/* Header — hidden for panel 0 since EyeDiseaseClassifierPanel has its own back button */}
-      {panelIndex !== 0 && (
-        <motion.div
-          initial={{ opacity: 0, y: -10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.25, duration: 0.3 }}
-          style={{ display:"flex", alignItems:"center", gap:16, padding:"14px 24px",
-            borderBottom:"1px solid rgba(255,255,255,0.08)", flexShrink:0,
-            background:"rgba(0,0,0,0.6)", backdropFilter:"blur(12px)" }}
+      {/* Persistent header with back button — shown for all panels */}
+      <motion.div
+        initial={{ opacity: 0, y: -10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.2, duration: 0.3 }}
+        style={{ display:"flex", alignItems:"center", gap:16, padding:"16px 28px",
+          borderBottom:"1px solid rgba(255,255,255,0.07)", flexShrink:0,
+          background:"rgba(8,14,26,0.90)", backdropFilter:"blur(16px)",
+          WebkitBackdropFilter:"blur(16px)", zIndex:10 }}
+      >
+        <motion.button
+          whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }}
+          onClick={onClose}
+          style={{ display:"inline-flex", alignItems:"center", gap:8,
+            background:"rgba(255,255,255,0.12)", border:"1px solid rgba(255,255,255,0.22)",
+            borderRadius:10, padding:"8px 16px", color:"#fff",
+            fontFamily:"'DM Mono', monospace", fontSize:11, letterSpacing:1, cursor:"pointer" }}
         >
-          <motion.button
-            whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
-            onClick={onClose}
-            style={{ display:"flex", alignItems:"center", gap:8,
-              background:"rgba(255,255,255,0.1)", border:"1px solid rgba(255,255,255,0.15)",
-              borderRadius:10, padding:"8px 16px", color:"#fff",
-              fontSize:13, fontWeight:600, cursor:"pointer" }}
-          >
-            ← Home
-          </motion.button>
-          <span style={{ color:"#666", fontSize:13 }}>{panels[panelIndex]?.title}</span>
-        </motion.div>
-      )}
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M19 12H5M12 19l-7-7 7-7"/>
+          </svg>
+          HOME
+        </motion.button>
+        <span style={{ fontFamily:"'DM Mono', monospace", color:"rgba(255,255,255,0.35)", fontSize:10, letterSpacing:2 }}>
+          {panels[panelIndex]?.title?.toUpperCase()}
+        </span>
+      </motion.div>
 
       <div style={{ flex:1, overflow:"hidden" }}>
         {content[panelIndex]}
