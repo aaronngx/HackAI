@@ -1,0 +1,1266 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Astigmatism Screening</title>
+  <style>
+    *{margin:0;padding:0;box-sizing:border-box;}
+    body{background:#000;color:#e0e0e0;font-family:'Segoe UI',system-ui,sans-serif;height:100vh;overflow:hidden;display:flex;flex-direction:column;}
+
+    header{padding:7px 16px;background:#0a0a12;border-bottom:1px solid #1a1a2a;display:flex;align-items:center;gap:12px;flex-shrink:0;}
+    header h1{font-size:14px;color:#00FF88;letter-spacing:1px;}
+    #phase-badge{margin-left:auto;font-size:11px;color:#FFD700;background:#1a1600;border:1px solid #443300;border-radius:4px;padding:2px 8px;}
+    #btn-debug-toggle{background:#1a1a2a;border:1px solid #333;color:#888;border-radius:4px;padding:3px 10px;font-size:11px;cursor:pointer;}
+
+    main{flex:1;display:flex;overflow:hidden;min-height:0;}
+
+    #stim-wrap{flex:1;position:relative;background:#000;overflow:hidden;}
+    #stim-canvas{display:block;width:100%;height:100%;}
+    #video{position:fixed;left:-9999px;top:0;width:640px;height:480px;opacity:0;pointer-events:none;}
+
+    /* overlays */
+    .ov{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;background:rgba(0,0,0,0.93);z-index:60;gap:14px;overflow-y:auto;padding:16px;}
+    .ov.hidden{display:none;}
+    .ov h2{color:#00FF88;font-size:22px;letter-spacing:1px;}
+    .ov p{color:#aaa;font-size:13px;line-height:1.75;max-width:460px;text-align:center;}
+    .ov .note{font-size:11px;color:#555;max-width:440px;text-align:center;}
+
+    .spinner{width:36px;height:36px;border:3px solid #222;border-top-color:#00FF88;border-radius:50%;animation:spin .8s linear infinite;}
+    @keyframes spin{to{transform:rotate(360deg);}}
+
+    .btn{padding:9px 26px;border:none;border-radius:7px;font-size:13px;font-weight:700;cursor:pointer;transition:opacity .15s;}
+    .btn:disabled{opacity:.3;cursor:not-allowed;}
+    .btn-green{background:#00FF88;color:#000;}
+    .btn-blue {background:#2255FF;color:#fff;}
+    .btn-gray {background:#222;color:#aaa;border:1px solid #444;}
+    .btn-row  {display:flex;gap:10px;flex-wrap:wrap;justify-content:center;}
+
+    #cal-card{background:#fff;border:3px solid #FFD700;border-radius:8px;display:flex;align-items:center;justify-content:center;color:#333;font-size:12px;font-weight:600;user-select:none;}
+    #cal-slider-wrap{display:flex;flex-direction:column;align-items:center;gap:8px;width:380px;}
+    #cal-slider{width:100%;accent-color:#FFD700;}
+    #cal-val{font-size:12px;color:#FFD700;}
+
+    #cover-bar-wrap{width:260px;height:8px;background:#222;border-radius:4px;overflow:hidden;}
+    #cover-bar{height:100%;background:#00FF88;width:0%;transition:width .05s;}
+
+    /* on-canvas overlays */
+    #msg-overlay{position:absolute;bottom:60px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.70);padding:8px 22px;border-radius:8px;font-size:16px;font-weight:700;color:#fff;letter-spacing:1px;text-align:center;pointer-events:none;display:none;white-space:nowrap;}
+    #label-overlay{position:absolute;top:18px;left:50%;transform:translateX(-50%);font-size:26px;font-weight:900;color:#FFD700;text-shadow:0 0 12px #FFD700;pointer-events:none;display:none;}
+    #progress-overlay{position:absolute;top:14px;right:16px;font-size:12px;color:#555;pointer-events:none;}
+    #dist-badge{position:absolute;bottom:14px;right:14px;background:rgba(0,0,0,0.6);border:1px solid #333;border-radius:5px;padding:3px 10px;font-size:12px;color:#666;pointer-events:none;}
+    #dist-badge.ok{color:#00FF88;border-color:#00FF88;}
+    #dist-badge.warn{color:#FFD700;border-color:#FFD700;}
+    #dist-badge.err{color:#FF4444;border-color:#FF4444;}
+
+    /* head-lost toast */
+    #head-toast{display:none;position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);background:rgba(20,0,0,0.92);border:2px solid #FF4444;border-radius:12px;padding:18px 32px;text-align:center;z-index:80;pointer-events:none;}
+
+    /* results */
+    #ov-results table{border-collapse:collapse;margin:6px 0;}
+    #ov-results td{padding:5px 14px;font-size:13px;}
+    #ov-results td:first-child{color:#888;text-align:right;}
+    #ov-results td:last-child{color:#fff;font-weight:700;}
+    .result-section{background:#0d0d1a;border:1px solid #223;border-radius:8px;padding:12px 16px;text-align:left;}
+    .result-section h3{font-size:11px;color:#00FF88;margin-bottom:4px;letter-spacing:1px;}
+    .eye-col{display:flex;gap:10px;flex-wrap:wrap;justify-content:center;}
+
+    /* debug panel */
+    #debug-panel{width:200px;background:#080810;border-left:1px solid #1a1a2a;padding:10px;overflow-y:auto;font-size:11px;flex-shrink:0;}
+    #debug-panel h2{color:#00FF88;font-size:11px;margin-bottom:6px;}
+    .dl{color:#555;padding:1px 0;}
+    .dv{color:#ccc;font-weight:600;}
+    .dv.ok{color:#00FF88;} .dv.warn{color:#FFD700;} .dv.err{color:#FF4444;}
+    table.dt{width:100%;border-collapse:collapse;}
+    table.dt td{padding:1px 0;vertical-align:top;}
+    table.dt td:first-child{color:#555;width:76px;}
+    hr.ds{border:none;border-top:1px solid #1a1a2a;margin:5px 0;}
+    .ds-label{font-size:10px;color:#444;text-transform:uppercase;letter-spacing:1px;margin:4px 0 2px;}
+
+    /* phase-1 controls */
+    #p1-controls{position:absolute;bottom:0;left:0;right:0;background:rgba(0,0,0,0.85);border-top:1px solid #1a1a2a;padding:10px 16px;display:flex;gap:12px;align-items:center;flex-wrap:wrap;z-index:50;}
+    #p1-controls label{font-size:11px;color:#555;}
+    #p1-controls input[type=range]{width:100px;accent-color:#00FF88;}
+    #p1-controls select{background:#111;color:#ccc;border:1px solid #333;border-radius:4px;padding:2px 6px;font-size:11px;}
+    #p1-controls input[type=color]{width:36px;height:22px;border:none;border-radius:3px;cursor:pointer;}
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>Astigmatism Screening</h1>
+  <span id="phase-badge">INIT</span>
+  <button class="btn btn-gray" id="btn-debug-toggle" style="margin-left:8px;">Debug</button>
+  <button class="btn btn-gray" id="btn-recal" style="margin-left:4px;font-size:11px;padding:3px 8px;">Recalibrate</button>
+</header>
+
+<main>
+<div id="stim-wrap">
+  <canvas id="stim-canvas"></canvas>
+  <video id="video" autoplay playsinline muted></video>
+
+  <!-- on-canvas HUD -->
+  <div id="label-overlay"></div>
+  <div id="progress-overlay"></div>
+  <div id="msg-overlay"></div>
+  <div id="dist-badge">—</div>
+
+  <!-- MDSF left/right tap buttons (shown only during response) -->
+  <div id="mdsf-btns" style="display:none;position:absolute;bottom:32px;left:0;width:100%;
+    display:none;justify-content:space-between;padding:0 40px;box-sizing:border-box;pointer-events:none;">
+    <button id="btn-mdsf-left"  onclick="handleMDSFResponse('left')"
+      style="pointer-events:all;padding:18px 48px;font-size:20px;font-weight:800;
+      background:rgba(255,255,255,0.1);border:2px solid rgba(255,255,255,0.3);
+      border-radius:14px;color:#fff;cursor:pointer;">← LEFT</button>
+    <button id="btn-mdsf-right" onclick="handleMDSFResponse('right')"
+      style="pointer-events:all;padding:18px 48px;font-size:20px;font-weight:800;
+      background:rgba(255,255,255,0.1);border:2px solid rgba(255,255,255,0.3);
+      border-radius:14px;color:#fff;cursor:pointer;">RIGHT →</button>
+  </div>
+
+  <!-- head-lost toast -->
+  <div id="head-toast">
+    <div style="font-size:28px;">⚠</div>
+    <div style="color:#FF4444;font-size:16px;font-weight:800;">Face not detected</div>
+    <div style="color:#aaa;font-size:12px;margin-top:4px;">Look at the camera — test paused</div>
+  </div>
+
+  <!-- ═══ OVERLAY: Display calibration ═══ -->
+  <div class="ov" id="ov-display-cal">
+    <h2>Display Calibration</h2>
+    <p>Drag the slider until the white card below matches the size of a real credit card (85.6 × 54 mm).</p>
+    <div id="cal-slider-wrap">
+      <div id="cal-card" style="width:300px;height:189px;">Credit card size</div>
+      <input type="range" id="cal-slider" min="100" max="700" value="300"/>
+      <span id="cal-val">300 px wide</span>
+    </div>
+    <div class="btn-row">
+      <button class="btn btn-green" id="btn-cal-ok">Confirm Size</button>
+      <button class="btn btn-gray"  id="btn-cal-skip">Enter Screen Size Instead</button>
+    </div>
+    <p class="note">Calibration is saved in your browser. You only need to do this once per device.</p>
+  </div>
+
+  <!-- ═══ OVERLAY: Loading ═══ -->
+  <div class="ov hidden" id="ov-loading">
+    <div class="spinner"></div>
+    <p id="loading-msg">Loading AI models…</p>
+    <p class="note">First load may take 10–20 s (models are cached after that)</p>
+  </div>
+
+  <!-- ═══ OVERLAY: Monocular setup ═══ -->
+  <div class="ov hidden" id="ov-monocular">
+    <h2>Cover One Eye</h2>
+    <p>Cover your <strong id="mono-eye-name">RIGHT</strong> eye firmly with your hand and hold it there.<br>
+       Keep it covered for the entire test.</p>
+    <!-- Live webcam preview -->
+    <div style="position:relative;display:inline-block;margin:8px 0;">
+      <canvas id="mono-preview" width="280" height="210"
+        style="border-radius:10px;background:#111;display:block;transform:scaleX(-1);"></canvas>
+      <div id="mono-face-badge" style="position:absolute;top:6px;left:6px;font-size:11px;font-weight:700;
+        padding:3px 8px;border-radius:6px;background:#FF4444;color:#fff;">No Face</div>
+    </div>
+    <div id="cover-status" style="font-size:20px;font-weight:800;color:#FFD700;">—</div>
+    <div id="cover-bar-wrap"><div id="cover-bar"></div></div>
+    <p class="note">Hold cover steady until the bar fills…</p>
+    <div style="font-size:11px;color:#444;text-align:center;">
+      Hand: <span id="mono-hand">—</span> &nbsp;|&nbsp; EAR: <span id="mono-ear">—</span>
+    </div>
+    <div class="btn-row" style="margin-top:10px;">
+      <button class="btn btn-green" id="btn-mono-confirm">My eye is covered ✓</button>
+      <button class="btn btn-gray"  id="btn-mono-skip">Skip check</button>
+    </div>
+  </div>
+
+  <!-- ═══ OVERLAY: Axis intro ═══ -->
+  <div class="ov hidden" id="ov-axis-intro">
+    <h2>Step 1 — Find Astigmatic Axis</h2>
+    <p>You'll see <strong>two sets of lines</strong> appear one after the other.<br>
+       Press <strong>1</strong> if the <em>first</em> looked sharper, or <strong>2</strong> if the <em>second</em> did.</p>
+    <p>There are no right or wrong answers — trust your instinct.</p>
+    <div class="btn-row">
+      <button class="btn btn-green" id="btn-axis-start">Begin →</button>
+    </div>
+    <p class="note">~6 comparisons · Keep your head still · Lines will appear in blue</p>
+  </div>
+
+  <!-- ═══ OVERLAY: MDSF intro ═══ -->
+  <div class="ov hidden" id="ov-mdsf-intro">
+    <h2>Step 2 — Resolution Test</h2>
+    <p>Fine lines will appear on the <strong>LEFT</strong> or <strong>RIGHT</strong> side.<br>
+       Press <strong>← Left</strong> or <strong>→ Right</strong> (or tap the buttons) to say which side.<br>
+       The test alternates between two orientations — just say where you see lines.</p>
+    <div class="btn-row">
+      <button class="btn btn-green" id="btn-mdsf-start">Begin →</button>
+    </div>
+    <p class="note">10 trials total · Both meridians interleaved · ~21 seconds</p>
+  </div>
+
+  <!-- ═══ OVERLAY: Far-point walk-back ═══ -->
+  <div class="ov hidden" id="ov-farpoint">
+    <h2 id="fp-title">Step 3 — Far Point (Meridian 1)</h2>
+    <p>Sit <strong>close to the screen (~30 cm)</strong> so the lines are clearly visible.<br>
+       Then <strong>slowly lean back</strong> until the lines blur or disappear.<br>
+       <strong>Hold still</strong> at that distance — it will auto-capture.</p>
+    <div id="fp-dist"   style="font-size:34px;font-weight:900;color:#00FF88;letter-spacing:2px;">— cm</div>
+    <div id="fp-cpd"    style="font-size:12px;color:#555;">— CPD at this distance</div>
+    <div id="fp-status" style="font-size:14px;color:#aaa;margin-top:4px;">Move back slowly…</div>
+    <!-- Hold progress bar -->
+    <div id="fp-hold-wrap" style="width:260px;height:8px;background:#222;border-radius:4px;overflow:hidden;display:none;margin-top:8px;">
+      <div id="fp-hold-bar" style="height:100%;background:#00FF88;width:0%;transition:width .05s;"></div>
+    </div>
+    <div id="fp-hold-label" style="font-size:11px;color:#555;margin-top:4px;display:none;">Hold still to capture…</div>
+    <div class="btn-row" style="margin-top:12px;">
+      <button class="btn btn-gray" id="btn-fp-skip">Cannot tell (skip)</button>
+    </div>
+    <p class="note" style="margin-top:8px;">Keep your <span id="fp-eye">right</span> eye covered throughout.</p>
+  </div>
+
+  <!-- ═══ OVERLAY: Results ═══ -->
+  <div class="ov hidden" id="ov-results">
+    <h2 id="r-title">Screening Results</h2>
+
+    <!-- Current eye -->
+    <div class="eye-col" id="r-cur-block">
+      <div class="result-section">
+        <h3 id="r-eye-label">EYE TESTED</h3>
+        <table><tbody>
+          <tr><td>Axis</td>       <td id="r-axis">—</td></tr>
+          <tr><td>Axis conf.</td> <td id="r-axis-conf">—</td></tr>
+          <tr><td>Quality</td>    <td id="r-quality">—</td></tr>
+        </tbody></table>
+      </div>
+      <div class="result-section">
+        <h3>MDSF ALONG AXIS</h3>
+        <table><tbody>
+          <tr><td>CPD</td>    <td id="r-mdsf1">—</td></tr>
+          <tr><td>Snellen</td><td id="r-sn1">—</td></tr>
+        </tbody></table>
+      </div>
+      <div class="result-section">
+        <h3>MDSF PERP.</h3>
+        <table><tbody>
+          <tr><td>CPD</td>    <td id="r-mdsf2">—</td></tr>
+          <tr><td>Snellen</td><td id="r-sn2">—</td></tr>
+        </tbody></table>
+      </div>
+      <div class="result-section">
+        <h3>REFRACTION EST.</h3>
+        <table><tbody>
+          <tr><td>SPH</td>  <td id="r-sph">—</td></tr>
+          <tr><td>CYL</td>  <td id="r-cyl">—</td></tr>
+          <tr><td>AXIS</td> <td id="r-raxis">—</td></tr>
+          <tr><td>FP1</td>  <td id="r-fp1">—</td></tr>
+          <tr><td>FP2</td>  <td id="r-fp2">—</td></tr>
+        </tbody></table>
+        <div id="r-severity" style="margin-top:6px;font-size:11px;color:#FFD700;"></div>
+      </div>
+    </div>
+
+    <!-- Retest banner -->
+    <div id="r-retest" style="display:none;background:rgba(255,68,68,0.12);border:1px solid #FF4444;
+      border-radius:8px;padding:10px 16px;margin-top:8px;max-width:480px;text-align:center;">
+      <div style="color:#FF4444;font-size:13px;font-weight:700;" id="r-retest-msg"></div>
+    </div>
+
+    <!-- Previous eye (shown after 2nd eye done) -->
+    <div id="r-prev-block" style="display:none;margin-top:10px;">
+      <div style="font-size:10px;color:#333;text-align:center;letter-spacing:1px;margin-bottom:4px;">PREVIOUS EYE</div>
+      <div class="eye-col">
+        <div class="result-section">
+          <h3 id="r-prev-label">—</h3>
+          <table><tbody>
+            <tr><td>Axis</td>    <td id="r-prev-axis">—</td></tr>
+            <tr><td>Quality</td> <td id="r-prev-quality">—</td></tr>
+          </tbody></table>
+        </div>
+        <div class="result-section">
+          <h3>SNELLEN</h3>
+          <table><tbody>
+            <tr><td>Along</td><td id="r-prev-sn1">—</td></tr>
+            <tr><td>Perp.</td><td id="r-prev-sn2">—</td></tr>
+          </tbody></table>
+        </div>
+        <div class="result-section">
+          <h3>REFRACTION</h3>
+          <table><tbody>
+            <tr><td>SPH</td>  <td id="r-prev-sph">—</td></tr>
+            <tr><td>CYL</td>  <td id="r-prev-cyl">—</td></tr>
+            <tr><td>AXIS</td> <td id="r-prev-raxis">—</td></tr>
+          </tbody></table>
+        </div>
+      </div>
+    </div>
+
+    <p id="r-note" class="note" style="color:#FFD700;margin-top:8px;"></p>
+    <p class="note" style="margin-top:2px;">⚠ Screening estimate only — not a clinical prescription.</p>
+    <p id="save-status" style="font-size:12px;margin-top:4px;color:#888;"></p>
+    <div class="btn-row" style="margin-top:10px;">
+      <button class="btn btn-green" id="btn-other-eye">Test Other Eye →</button>
+      <button class="btn btn-gray"  id="btn-restart">Restart</button>
+      <button class="btn btn-blue"  id="btn-export">Export JSON</button>
+    </div>
+  </div>
+
+  <!-- Phase-1 live preview controls -->
+  <div id="p1-controls" style="display:none;">
+    <label>Angle <input type="range" id="p1-angle" min="0" max="170" value="0" step="10"/> <span id="p1-angle-val">0°</span></label>
+    <label>CPD <input type="range" id="p1-cpd" min="0.5" max="20" value="3" step="0.5"/> <span id="p1-cpd-val">3</span></label>
+    <label>Color <input type="color" id="p1-color" value="#FF0000"/></label>
+    <label>Type <select id="p1-type"><option value="grating">Grating</option><option value="tripole">Tripole</option></select></label>
+    <button class="btn btn-gray" id="btn-p1-exit" style="padding:4px 12px;font-size:11px;">Exit Preview</button>
+  </div>
+</div>
+
+<!-- Debug panel -->
+<aside id="debug-panel" style="display:none;">
+  <h2>Debug</h2>
+  <table class="dt"><tbody>
+    <tr><td>State</td>  <td><span id="d-state"  class="dv">—</span></td></tr>
+    <tr><td>Eye</td>    <td><span id="d-eye"    class="dv">—</span></td></tr>
+    <tr><td>Face</td>   <td><span id="d-face"   class="dv">—</span></td></tr>
+    <tr><td>Gated</td>  <td><span id="d-gated"  class="dv">—</span></td></tr>
+    <tr><td>Quality</td><td><span id="d-quality" class="dv">—</span></td></tr>
+  </tbody></table>
+
+  <hr class="ds"/><div class="ds-label">Distance</div>
+  <table class="dt"><tbody>
+    <tr><td>Raw cm</td>  <td><span id="d-raw" class="dv">—</span></td></tr>
+    <tr><td>Smooth</td>  <td><span id="d-sm"  class="dv">—</span></td></tr>
+    <tr><td>Corrected</td><td><span id="d-cor" class="dv">—</span></td></tr>
+  </tbody></table>
+
+  <hr class="ds"/><div class="ds-label">Display</div>
+  <table class="dt"><tbody>
+    <tr><td>mm/px</td> <td><span id="d-mmpx"   class="dv">—</span></td></tr>
+    <tr><td>PPI</td>   <td><span id="d-ppi"    class="dv">—</span></td></tr>
+    <tr><td>maxCPD</td><td><span id="d-maxcpd" class="dv">—</span></td></tr>
+  </tbody></table>
+
+  <hr class="ds"/><div class="ds-label">Axis Search</div>
+  <table class="dt"><tbody>
+    <tr><td>Progress</td><td><span id="d-ax-prog" class="dv">—</span></td></tr>
+    <tr><td>Pair</td>    <td><span id="d-ax-pair" class="dv">—</span></td></tr>
+  </tbody></table>
+
+  <hr class="ds"/><div class="ds-label">Staircase</div>
+  <table class="dt"><tbody>
+    <tr><td>Reversals</td><td><span id="d-sc-rev" class="dv">—</span></td></tr>
+    <tr><td>Trials</td>   <td><span id="d-sc-tri" class="dv">—</span></td></tr>
+    <tr><td>CPD</td>      <td><span id="d-sc-cpd" class="dv">—</span></td></tr>
+  </tbody></table>
+
+  <hr class="ds"/>
+  <table class="dt"><tbody>
+    <tr><td>FPS</td><td><span id="d-fps" class="dv">—</span></td></tr>
+  </tbody></table>
+</aside>
+</main>
+
+<script type="module">
+// ─── Imports ─────────────────────────────────────────────────────────────────
+import { DisplayCalibrator, CARD_W_MM, CARD_H_MM } from '/display-calibrator.js';
+import { DistanceSmoother }    from '/distance-smoother.js';
+import { StimulusRenderer }    from '/stimulus-renderer.js';
+import { MonocularEnforcer }   from '/monocular-enforcer.js';
+import { FastAxisEngine }      from '/fast-axis-engine.js';
+import { InterleavedStaircase } from '/staircase-engine.js';
+import { FarPointCapture, HoldCapture } from '/far-point-capture.js';
+import { ConfidenceReporter }  from '/confidence-reporter.js';
+import { computePD, computeEAR, R_EAR_IDX, L_EAR_IDX } from '/face-eye-tracker.js';
+
+// ─── Constants ───────────────────────────────────────────────────────────────
+const WASM_PATH   = '/mediapipe-wasm';
+const FACE_MODEL  = 'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task';
+const HAND_MODEL  = 'https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task';
+// Pre-warm browser cache so models are available when startLoading() runs
+fetch(FACE_MODEL).catch(() => {});
+fetch(HAND_MODEL).catch(() => {});
+
+const AXIS_CPD      = 3.0;   // CPD for axis tripole stimuli
+const AXIS_DUR_MS   = 700;   // each interval duration
+const AXIS_ISI_MS   = 150;   // blank between intervals
+const AXIS_READY_MS = 400;   // "GET READY" pause
+
+const MDSF_DUR_MS     = 700;   // grating display duration
+const MDSF_ISI_MS     = 300;   // fixation before trial
+const MDSF_FB_MS      = 300;   // feedback flash duration
+const MDSF_TIMEOUT_MS = 6000;  // auto-advance if no response
+
+const FP_HOLD_MS     = 1500; // ms to hold still for auto-capture
+const HEAD_GATE_MS   = 1000; // ms of face-loss before pausing trial
+
+// ─── DOM helpers ─────────────────────────────────────────────────────────────
+const canvas = document.getElementById('stim-canvas');
+const video  = document.getElementById('video');
+const D      = id => document.getElementById(id);
+const setDv  = (id, text, cls = '') => {
+  const el = D(id); if (!el) return;
+  el.textContent = text;
+  el.className   = 'dv' + (cls ? ' ' + cls : '');
+};
+
+// ─── Module instances ────────────────────────────────────────────────────────
+const calibrator = new DisplayCalibrator();
+const smoother   = new DistanceSmoother({ cameraOffsetMm: 25 });
+const enforcer   = new MonocularEnforcer({ sustainMs: 400 });
+const reporter   = new ConfidenceReporter();
+let   renderer   = null;
+
+// ─── App state ───────────────────────────────────────────────────────────────
+let appState   = 'DISPLAY_CAL';
+let stimState  = 'IDLE';
+let stimStateT = 0;
+
+// Current eye being covered ('right' = cover right eye, test left eye)
+let currentEye = 'right';
+
+// Per-eye results store
+const eyeResultsMap = {};
+
+// Axis search
+let axisEngine = null;
+let axisPair   = null;
+let axisStep   = 0;   // 0=queue-next 1=ready 2=showA 3=isi 4=showB/wait
+let foundAxis  = null;
+let axisConf   = 0;   // 0 | 0.5 | 1.0
+
+// MDSF — interleaved dual-meridian staircase
+let interleavedSC   = null;
+let mdsf1Axis       = 0;
+let mdsf2Axis       = 90;
+let mdsfSide        = 'left';
+let curMeridianTrial = null; // { meridian, axis, cpd } from interleavedSC.nextTrial()
+
+// Far-point capture
+let holdCapture1 = null;
+let holdCapture2 = null;
+let fp1ResultMm  = null;
+let fp2ResultMm  = null;
+let fpMeridian   = 1;
+let fpTargetCPD  = 3; // spatial frequency for far-point grating
+
+// Head-gating
+let headLostT    = null;
+let headGated    = false;
+let lastFrameT   = performance.now();
+let lastDistMm   = 400;
+
+// MediaPipe / camera
+let faceLandmarker = null, handLandmarker = null;
+let stream = null, animId = null, running = false;
+let lastFaceLms = null, lastHands = [], lastHandedness = [];
+let frameCount = 0, lastFpsT = performance.now(), fps = 0;
+
+// Phase-1 preview
+let p1Mode = false;
+
+// Session export object
+const session = { ts: Date.now(), eyes: {} };
+
+// ─── Canvas resize ───────────────────────────────────────────────────────────
+function resizeCanvas() {
+  const w = canvas.parentElement;
+  canvas.width = w.clientWidth; canvas.height = w.clientHeight;
+}
+window.addEventListener('resize', resizeCanvas);
+resizeCanvas();
+
+// ─── Overlay helpers ─────────────────────────────────────────────────────────
+const OV_IDS = ['ov-display-cal','ov-loading','ov-monocular','ov-axis-intro',
+                 'ov-mdsf-intro','ov-farpoint','ov-results'];
+function showOv(id)  { OV_IDS.forEach(o => D(o).classList.toggle('hidden', o !== id)); }
+function hideAllOv() { OV_IDS.forEach(o => D(o).classList.add('hidden')); }
+
+function showMsg(text, ms = 0) {
+  const el = D('msg-overlay');
+  el.textContent   = text;
+  el.style.display = text ? 'block' : 'none';
+  if (ms > 0) setTimeout(() => { el.style.display = 'none'; }, ms);
+}
+function showLabel(text, color = '#FFD700') {
+  const el = D('label-overlay');
+  el.textContent    = text;
+  el.style.color    = color;
+  el.style.display  = text ? 'block' : 'none';
+}
+function setProgress(t) { D('progress-overlay').textContent = t; }
+function setState(s)     { appState = s; D('phase-badge').textContent = s; setDv('d-state', s); }
+
+// ─── Display calibration ──────────────────────────────────────────────────────
+function updateCard(wPx) {
+  const hPx = wPx * (CARD_H_MM / CARD_W_MM);
+  D('cal-card').style.width  = wPx + 'px';
+  D('cal-card').style.height = hPx + 'px';
+  D('cal-val').textContent   = wPx + ' px wide';
+}
+D('cal-slider').addEventListener('input', e => updateCard(+e.target.value));
+if (calibrator.isCalibrated()) {
+  const px = Math.min(700, Math.max(100, Math.round(CARD_W_MM / calibrator.mmPerPx)));
+  D('cal-slider').value = px;
+}
+updateCard(+D('cal-slider').value);
+
+D('btn-cal-ok').onclick = () => {
+  const wPx = +D('cal-slider').value, hPx = wPx * CARD_H_MM / CARD_W_MM;
+  const mpp = DisplayCalibrator.fromCardPx(wPx, hPx);
+  if (mpp < 0.04 || mpp > 1.2) { alert('Unusual value — please try again.'); return; }
+  calibrator.save(mpp);
+  updateDebugCal();
+  startLoading();
+};
+D('btn-cal-skip').onclick = () => {
+  if (!calibrator.isCalibrated()) {
+    const diagIn = parseFloat(prompt('Enter screen diagonal in inches (e.g. 15.6):', '15.6'));
+    if (!diagIn || isNaN(diagIn)) return;
+    const diagPx = Math.sqrt(screen.width ** 2 + screen.height ** 2) * (devicePixelRatio || 1);
+    calibrator.save(25.4 / (diagPx / diagIn));
+  }
+  updateDebugCal();
+  startLoading();
+};
+D('btn-recal').onclick = () => {
+  calibrator.clear(); stopCamera();
+  showOv('ov-display-cal'); setState('DISPLAY_CAL');
+};
+function updateDebugCal() {
+  setDv('d-mmpx', calibrator.mmPerPx?.toFixed(4) ?? '—');
+  setDv('d-ppi',  calibrator.ppi?.toFixed(1)    ?? '—');
+}
+
+// ─── MediaPipe + Camera ───────────────────────────────────────────────────────
+async function startLoading() {
+  if (stream) return; // already started
+  showOv('ov-loading'); setState('LOADING');
+  D('loading-msg').textContent = 'Requesting camera…';
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480, facingMode: 'user' }, audio: false });
+    video.srcObject = stream;
+    video.play().catch(() => {}); // fire-and-forget; muted streams always autoplay
+    await new Promise(r => {
+      if (video.readyState >= 2) { r(); return; }
+      video.addEventListener('loadeddata', r, { once: true });
+    });
+  } catch (e) {
+    D('loading-msg').textContent = 'Camera error: ' + e.message; return;
+  }
+  D('loading-msg').textContent = 'Loading AI models…';
+  try {
+    const { FaceLandmarker, HandLandmarker, FilesetResolver } =
+      await import('/mediapipe-vision.js');
+    const fs = await FilesetResolver.forVisionTasks(WASM_PATH);
+    const tryCreate = async (delegate) => Promise.all([
+      FaceLandmarker.createFromOptions(fs, {
+        baseOptions: { modelAssetPath: FACE_MODEL, delegate },
+        outputFaceBlendshapes: false, runningMode: 'VIDEO', numFaces: 1,
+      }),
+      HandLandmarker.createFromOptions(fs, {
+        baseOptions: { modelAssetPath: HAND_MODEL, delegate },
+        runningMode: 'VIDEO', numHands: 2,
+      }),
+    ]);
+    try {
+      D('loading-msg').textContent = 'Loading AI models (GPU)…';
+      [faceLandmarker, handLandmarker] = await tryCreate('GPU');
+    } catch (_) {
+      D('loading-msg').textContent = 'GPU unavailable — using CPU…';
+      [faceLandmarker, handLandmarker] = await tryCreate('CPU');
+    }
+  } catch (e) {
+    D('loading-msg').textContent = 'Model load error: ' + e.message; return;
+  }
+  renderer = new StimulusRenderer(canvas);
+  running  = true;
+  requestAnimationFrame(renderLoop);
+  if (p1Mode) {
+    D('p1-controls').style.display = 'flex';
+    hideAllOv(); setState('P1_PREVIEW');
+  } else {
+    goToMonocularSetup();
+  }
+}
+function stopCamera() {
+  running = false;
+  if (animId) { cancelAnimationFrame(animId); animId = null; }
+  stream?.getTracks().forEach(t => t.stop());
+}
+
+// ─── Phase-1 preview ─────────────────────────────────────────────────────────
+D('btn-debug-toggle').onclick = () => {
+  const p = D('debug-panel');
+  p.style.display = p.style.display === 'none' ? 'block' : 'none';
+};
+// Allow entering P1 mode before loading starts by query param
+if (location.search.includes('p1')) {
+  p1Mode = true;
+  D('p1-controls').style.display = 'flex';
+}
+D('btn-p1-exit').onclick = () => {
+  p1Mode = false;
+  D('p1-controls').style.display = 'none';
+  goToMonocularSetup();
+};
+D('p1-angle').addEventListener('input', e => { D('p1-angle-val').textContent = e.target.value + '°'; });
+D('p1-cpd').addEventListener('input',   e => { D('p1-cpd-val').textContent   = e.target.value; });
+
+// ─── Monocular setup ─────────────────────────────────────────────────────────
+function goToMonocularSetup() {
+  D('p1-controls').style.display = 'none';
+  D('mono-eye-name').textContent = currentEye.toUpperCase();
+  D('cover-bar').style.width     = '0%';
+  D('cover-status').textContent  = '—';
+  showOv('ov-monocular');
+  setState('MONOCULAR_SETUP');
+  enforcer.reset();
+  showLabel(''); showMsg(''); setProgress('');
+}
+D('btn-mono-confirm').onclick = () => beginAxisSearch();
+D('btn-mono-skip').onclick    = () => beginAxisSearch();
+
+// ─── Axis search ─────────────────────────────────────────────────────────────
+function beginAxisSearch() {
+  axisEngine = new FastAxisEngine();
+  foundAxis  = null;
+  axisConf   = 0;
+  axisStep   = 0;
+  hideAllOv(); showOv('ov-axis-intro');
+  setState('AXIS_INTRO');
+}
+D('btn-axis-start').onclick = () => {
+  hideAllOv(); setState('AXIS');
+  stimStateT = performance.now();
+  showLabel(''); showMsg(''); setProgress('');
+};
+function startNextAxisPair() {
+  axisPair   = axisEngine.nextPair();
+  axisStep   = 1;
+  stimStateT = performance.now();
+  showLabel('GET READY', '#888'); showMsg('');
+  const p = axisEngine.getProgress();
+  setProgress(`${p.done + 1} / 6`);
+  setDv('d-ax-pair', `${axisPair[0]}° vs ${axisPair[1]}°`);
+}
+
+// ─── MDSF ────────────────────────────────────────────────────────────────────
+function beginMDSF() {
+  mdsf1Axis = foundAxis ?? 0;
+  mdsf2Axis = (mdsf1Axis + 90) % 180;
+  interleavedSC = new InterleavedStaircase({
+    startCPD: 3,
+    maxTrials: 10,
+    maxCPD: Math.min(20, StimulusRenderer.maxCPD(lastDistMm, calibrator.mmPerPx ?? 0.18)),
+    axis1: mdsf1Axis,
+    axis2: mdsf2Axis,
+  });
+  showOv('ov-mdsf-intro');
+  setState('MDSF_INTRO');
+}
+D('btn-mdsf-start').onclick = () => {
+  hideAllOv();
+  setState('MDSF');
+  startMDSFTrial();
+};
+function startMDSFTrial() {
+  curMeridianTrial = interleavedSC.nextTrial(); // { meridian, axis, cpd }
+  mdsfSide   = Math.random() < 0.5 ? 'left' : 'right';
+  stimState  = 'MDSF_ISI';
+  stimStateT = performance.now();
+  D('mdsf-btns').style.display = 'none';
+  showLabel(''); showMsg('');
+  setProgress(`Trial: ${interleavedSC.totalTrials + 1} / ${interleavedSC.maxTrialsVal}`);
+}
+
+// ─── Far-point walk-back (hold-capture) ───────────────────────────────────────
+function beginFarPoint(num) {
+  fpMeridian = num;
+  if (num === 1) holdCapture1 = new HoldCapture(FP_HOLD_MS);
+  else           holdCapture2 = new HoldCapture(FP_HOLD_MS);
+  const axisAngle = num === 1 ? (foundAxis ?? 0) : ((foundAxis ?? 0) + 90) % 180;
+  // Target CPD = 65% of MDSF threshold for this meridian
+  const thr = interleavedSC ? interleavedSC.threshold(num - 1) : 3;
+  fpTargetCPD = Math.max(1, thr * 0.65);
+  D('fp-title').textContent   = `Step ${num + 2} — Far Point (Meridian ${num}: ${axisAngle}°)`;
+  D('fp-eye').textContent     = currentEye;
+  D('fp-status').textContent  = 'Move back slowly until lines blur, then hold still…';
+  D('fp-dist').textContent    = '— cm';
+  D('fp-cpd').textContent     = `${fpTargetCPD.toFixed(1)} CPD grating`;
+  D('fp-hold-wrap').style.display  = 'block';
+  D('fp-hold-label').style.display = 'block';
+  D('fp-hold-bar').style.width     = '0%';
+  showOv('ov-farpoint');
+  setState(num === 1 ? 'FAR_POINT_1' : 'FAR_POINT_2');
+  showLabel(''); showMsg('');
+}
+function autoCaptureFarPoint(mm) {
+  const cm = (mm / 10).toFixed(1);
+  if (fpMeridian === 1) {
+    fp1ResultMm = mm;
+    showLabel(`FP1: ${cm} cm`, '#00FF88');
+    setState('FAR_POINT_1_DONE');
+    setTimeout(() => { showLabel(''); beginFarPoint(2); }, 1800);
+  } else {
+    fp2ResultMm = mm;
+    showLabel(`FP2: ${cm} cm`, '#00FF88');
+    setState('FAR_POINT_2_DONE');
+    setTimeout(() => { showLabel(''); showResults(); }, 1800);
+  }
+}
+D('btn-fp-skip').onclick = () => {
+  if (fpMeridian === 1) {
+    fp1ResultMm = null; setState('FAR_POINT_1_DONE');
+    setTimeout(() => beginFarPoint(2), 200);
+  } else {
+    fp2ResultMm = null; setState('FAR_POINT_2_DONE');
+    setTimeout(showResults, 200);
+  }
+};
+
+// ─── Keyboard input ───────────────────────────────────────────────────────────
+function handleMDSFResponse(resp) {
+  if (stimState !== 'MDSF_RESPONSE') return;
+  D('mdsf-btns').style.display = 'none';
+  reporter.recordResponseMs(performance.now() - stimStateT);
+  const correct = resp === mdsfSide;
+  interleavedSC.trial(correct);
+  stimState  = 'MDSF_FEEDBACK';
+  stimStateT = performance.now();
+  showLabel(correct ? '✓' : '✗', correct ? '#00FF88' : '#FF4444');
+  showMsg('');
+}
+
+document.addEventListener('keydown', e => {
+  // Axis: 1 or 2
+  if (appState === 'AXIS' && axisStep === 4 && (e.key === '1' || e.key === '2')) {
+    const rt = performance.now() - stimStateT;
+    reporter.recordResponseMs(rt);
+    axisEngine.recordResponse(+e.key, rt);
+    if (axisEngine.isDone()) {
+      foundAxis = axisEngine.getFinalAxis();
+      axisConf  = axisEngine.getAxisConfidence();
+      showLabel(`AXIS: ${foundAxis}°`, '#00FF88');
+      showMsg('Axis found! Starting resolution test…', 2000);
+      setProgress('');
+      setState('AXIS_DONE');
+      setTimeout(() => beginMDSF(), 2200);
+    } else {
+      axisStep = 0;
+    }
+  }
+
+  // MDSF: ← → or 1/2
+  if (appState === 'MDSF' && stimState === 'MDSF_RESPONSE') {
+    let resp = null;
+    if (e.key === 'ArrowLeft'  || e.key === '1') resp = 'left';
+    if (e.key === 'ArrowRight' || e.key === '2') resp = 'right';
+    if (resp) handleMDSFResponse(resp);
+  }
+});
+
+// ─── Results ──────────────────────────────────────────────────────────────────
+function showResults() {
+  setState('RESULTS');
+  const t1 = interleavedSC?.threshold(0) ?? 0;
+  const t2 = interleavedSC?.threshold(1) ?? 0;
+  const s1 = interleavedSC?.spread(0)    ?? 0;
+  const s2 = interleavedSC?.spread(1)    ?? 0;
+  const r0 = interleavedSC?.reversalCount(0) ?? 0;
+  const r1 = interleavedSC?.reversalCount(1) ?? 0;
+  const holdCaptures = (fp1ResultMm ? 1 : 0) + (fp2ResultMm ? 1 : 0);
+
+  const q = reporter.scoreV3({
+    axisConfidence: axisConf,
+    reversals:      [r0, r1],
+    spread:         [s1, s2],
+    holdCaptures,
+    coverOk: true,
+  });
+
+  let ref = null;
+  if (fp1ResultMm || fp2ResultMm) {
+    ref = FarPointCapture.computeRefractionV3(fp1ResultMm, fp2ResultMm, foundAxis ?? 0);
+  }
+
+  // Snellen from threshold CPD
+  const toSnellen = cpd => Math.round(600 / Math.max(0.5, cpd));
+
+  // The eye that was TESTED = the one NOT covered
+  const testedEye = currentEye === 'right' ? 'left' : 'right';
+  const eyeData   = {
+    coveredEye: currentEye, testedEye,
+    axis: foundAxis, axisConf,
+    protocol: 'v3',
+    mdsf1: t1, mdsf2: t2,
+    sn1: toSnellen(t1), sn2: toSnellen(t2),
+    fp1Mm: fp1ResultMm, fp2Mm: fp2ResultMm,
+    refraction: ref, quality: q,
+  };
+  eyeResultsMap[testedEye] = eyeData;
+  session.eyes[testedEye]  = eyeData;
+
+  // Save to database with user feedback
+  D('save-status').textContent = '⏳ Saving…';
+  D('save-status').style.color = '#888';
+  try {
+    const token = localStorage.getItem('token') || '';
+    fetch('/api/save-exam', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token, testedEye, ...eyeData }),
+    }).then(r => r.json()).then(d => {
+      if (d.success) {
+        D('save-status').textContent = '✓ Saved to cloud';
+        D('save-status').style.color = '#00FF88';
+      } else {
+        D('save-status').textContent = '⚠ Cloud save failed — data available locally';
+        D('save-status').style.color = '#FFD700';
+      }
+    }).catch(() => {
+      D('save-status').textContent = '⚠ Offline — results not saved to cloud';
+      D('save-status').style.color = '#FFD700';
+    });
+  } catch (_) {
+    D('save-status').textContent = '⚠ Save error';
+    D('save-status').style.color = '#FF4444';
+  }
+
+  // Populate current-eye columns
+  const eyeName = testedEye.charAt(0).toUpperCase() + testedEye.slice(1);
+  const confLabel = axisConf >= 1.0 ? 'High' : axisConf >= 0.5 ? 'Medium' : 'Low';
+  D('r-title').textContent      = `Results — ${eyeName} Eye`;
+  D('r-eye-label').textContent  = `${eyeName.toUpperCase()} EYE`;
+  D('r-axis').textContent       = `${foundAxis ?? '?'}°`;
+  D('r-axis-conf').textContent  = `${confLabel} (${axisConf >= 1.0 ? '3/3' : axisConf >= 0.5 ? '2/3' : '1/3'} wins)`;
+  D('r-quality').textContent    = `${q}% (${ConfidenceReporter.label(q)})`;
+  D('r-quality').style.color    = q >= 80 ? '#00FF88' : q >= 60 ? '#FFD700' : '#FF4444';
+  D('r-mdsf1').textContent      = t1.toFixed(2) + ' CPD';
+  D('r-sn1').textContent        = `20/${toSnellen(t1)}`;
+  D('r-mdsf2').textContent      = t2.toFixed(2) + ' CPD';
+  D('r-sn2').textContent        = `20/${toSnellen(t2)}`;
+  if (ref) {
+    // ref.sph and ref.cyl are already signed (≤ 0 for myopia/astigmatism)
+    D('r-sph').textContent   = `${ref.sph.toFixed(2)} D`;
+    D('r-cyl').textContent   = `${ref.cyl.toFixed(2)} D`;
+    D('r-raxis').textContent = `${ref.axis}°`;
+    D('r-fp1').textContent   = fp1ResultMm ? `${(fp1ResultMm/10).toFixed(1)} cm` : 'skipped';
+    D('r-fp2').textContent   = fp2ResultMm ? `${(fp2ResultMm/10).toFixed(1)} cm` : 'skipped';
+    D('r-note').textContent  = ref.note;
+    // Severity labels
+    const myoLabel  = ConfidenceReporter.myopiaLabel(ref.sph);
+    const astigLbl  = ConfidenceReporter.astigLabel(ref.cyl);
+    D('r-severity').textContent = `${myoLabel} · ${astigLbl}`;
+    // Method note
+    D('r-note').textContent = `${ref.note} · Tripole axis search, grating far-point.`;
+  } else {
+    ['r-sph','r-cyl','r-fp1','r-fp2'].forEach(id => D(id).textContent = 'skipped');
+    D('r-raxis').textContent = '—'; D('r-note').textContent = '';
+    D('r-severity').textContent = '';
+  }
+
+  // Retest banner
+  const retestMsgs = ConfidenceReporter.autoRetest(q, ref);
+  if (retestMsgs.length) {
+    D('r-retest').style.display   = 'block';
+    D('r-retest-msg').textContent = retestMsgs.join(' ');
+  } else {
+    D('r-retest').style.display   = 'none';
+  }
+
+  // Previous eye
+  const prevEye  = testedEye === 'left' ? 'right' : 'left';
+  const prev     = eyeResultsMap[prevEye];
+  if (prev) {
+    const pe = prevEye.charAt(0).toUpperCase() + prevEye.slice(1);
+    D('r-prev-block').style.display   = 'block';
+    D('r-prev-label').textContent     = `${pe.toUpperCase()} EYE`;
+    D('r-prev-axis').textContent      = `${prev.axis ?? '?'}°`;
+    D('r-prev-quality').textContent   = `${prev.quality}%`;
+    D('r-prev-sn1').textContent       = `20/${prev.sn1}`;
+    D('r-prev-sn2').textContent       = `20/${prev.sn2}`;
+    const pr = prev.refraction;
+    D('r-prev-sph').textContent       = pr ? `${pr.sph.toFixed(2)} D` : 'skipped';
+    D('r-prev-cyl').textContent       = pr ? `${pr.cyl.toFixed(2)} D` : 'skipped';
+    D('r-prev-raxis').textContent     = pr ? `${pr.axis}°` : '—';
+    D('r-title').textContent          = 'Results — Both Eyes';
+    D('btn-other-eye').textContent    = '✓ Done — Restart';
+  } else {
+    D('r-prev-block').style.display   = 'none';
+    const otherName = prevEye.charAt(0).toUpperCase() + prevEye.slice(1);
+    D('btn-other-eye').textContent    = `Test ${otherName} Eye →`;
+  }
+
+  const diff  = Math.abs(t1 - t2);
+  const mNote = diff > 1.5
+    ? `⚠ ${diff.toFixed(1)} CPD difference between meridians — possible astigmatism.`
+    : `MDSF difference: ${diff.toFixed(1)} CPD (within normal range).`;
+  showMsg(mNote);
+  showOv('ov-results');
+}
+
+function resetEyeState() {
+  axisEngine    = null; interleavedSC = null;
+  foundAxis     = null; axisConf      = 0;
+  holdCapture1  = null; holdCapture2  = null;
+  fp1ResultMm   = null; fp2ResultMm   = null;
+  curMeridianTrial = null;
+  axisStep      = 0;    stimState     = 'IDLE';
+  showLabel(''); showMsg(''); setProgress('');
+  smoother.reset(); enforcer.reset(); reporter.reset();
+  headLostT = null; headGated = false;
+  D('head-toast').style.display = 'none';
+}
+
+D('btn-other-eye').onclick = () => {
+  const testedEye = currentEye === 'right' ? 'left' : 'right';
+  const prevEye   = testedEye === 'left' ? 'right' : 'left';
+  if (eyeResultsMap[prevEye]) {
+    // Both eyes done — full restart
+    currentEye = 'right';
+    Object.keys(eyeResultsMap).forEach(k => delete eyeResultsMap[k]);
+  } else {
+    currentEye = currentEye === 'right' ? 'left' : 'right';
+  }
+  resetEyeState();
+  goToMonocularSetup();
+};
+D('btn-restart').onclick = () => {
+  currentEye = 'right';
+  Object.keys(eyeResultsMap).forEach(k => delete eyeResultsMap[k]);
+  resetEyeState();
+  goToMonocularSetup();
+};
+D('btn-export').onclick = () => {
+  const blob = new Blob([JSON.stringify(session, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `astig_${Date.now()}.json`;
+  a.click();
+};
+
+// ─── Render loop ─────────────────────────────────────────────────────────────
+function renderLoop(ts) {
+  if (!running) return;
+  animId = requestAnimationFrame(renderLoop);
+  if (!video.videoWidth || video.readyState < 2) return;
+
+  const vw  = video.videoWidth, vh = video.videoHeight;
+  const now = performance.now();
+
+  // MediaPipe detect
+  const mpTs = Date.now();
+  const fr = faceLandmarker.detectForVideo(video, mpTs);
+  const hr = handLandmarker.detectForVideo(video, mpTs);
+  const faceLms    = (fr.faceLandmarks || [])[0] || null;
+  lastHands        = hr.landmarks  || [];
+  lastHandedness   = hr.handedness || [];
+  if (faceLms) lastFaceLms = faceLms;
+
+  // Canvas auto-fit
+  const wrap = canvas.parentElement;
+  if (canvas.width !== wrap.clientWidth || canvas.height !== wrap.clientHeight) {
+    canvas.width = wrap.clientWidth; canvas.height = wrap.clientHeight;
+  }
+
+  // Distance
+  let rawDist = null;
+  if (faceLms) { const pd = computePD(faceLms, vw, vh); rawDist = pd?.distCm ?? null; }
+  const smoothedCm  = smoother.push(rawDist);
+  const correctedMm = smoother.getCorrectedMm(calibrator.getScreenHeightMm() ?? 0);
+  const distMm      = correctedMm ?? (smoothedCm ? smoothedCm * 10 : 400);
+  const mmPerPx     = calibrator.mmPerPx ?? 0.18;
+  lastDistMm = distMm;
+
+  // ── Head-gating (active test phases) ─────────────────────────────────────
+  const delta = now - lastFrameT; lastFrameT = now;
+  const GATED = ['AXIS','MDSF','FAR_POINT_1','FAR_POINT_2'];
+  if (GATED.includes(appState)) {
+    reporter.update(distMm, !!faceLms);
+    if (!faceLms) {
+      if (!headLostT) headLostT = now;
+      if (now - headLostT > HEAD_GATE_MS) {
+        headGated  = true;
+        stimStateT += delta; // freeze stimulus clock
+      }
+    } else {
+      headLostT = null; headGated = false;
+    }
+    D('head-toast').style.display  = headGated ? 'block' : 'none';
+    setDv('d-gated', headGated ? 'YES' : 'no', headGated ? 'err' : 'ok');
+  } else {
+    D('head-toast').style.display = 'none';
+  }
+
+  // ── Monocular cover detection (lenient) ───────────────────────────────────
+  let coverState = { left: null, right: null };
+  if (faceLms && faceLms[468] && faceLms[473]) {
+    const lIris = { x: faceLms[473].x * vw, y: faceLms[473].y * vh };
+    const rIris = { x: faceLms[468].x * vw, y: faceLms[468].y * vh };
+    const pd    = Math.hypot(rIris.x - lIris.x, rIris.y - lIris.y);
+    const R     = Math.max(50, pd * 1.2);
+    for (let i = 0; i < lastHands.length; i++) {
+      const label = (lastHandedness[i]?.[0]?.categoryName || 'Hand') + ' Hand';
+      let lc = 0, rc = 0;
+      for (const lm of lastHands[i]) {
+        const hx = lm.x * vw, hy = lm.y * vh;
+        if (Math.hypot(hx - lIris.x, hy - lIris.y) <= R) lc++;
+        if (Math.hypot(hx - rIris.x, hy - rIris.y) <= R) rc++;
+      }
+      if (lc >= 2 && !coverState.left)  coverState.left  = label;
+      if (rc >= 2 && !coverState.right) coverState.right = label;
+    }
+  }
+  const earL = faceLms ? computeEAR(faceLms, L_EAR_IDX) : 0.3;
+  const earR = faceLms ? computeEAR(faceLms, R_EAR_IDX) : 0.3;
+  if (!coverState.left  && earL < 0.15) coverState.left  = 'closed';
+  if (!coverState.right && earR < 0.15) coverState.right = 'closed';
+  const coverResult = enforcer.update(coverState, currentEye, earL, earR);
+
+  updateDistBadge(smoothedCm);
+  updateDebugPanel(faceLms, smoothedCm, correctedMm, rawDist);
+  updateFPS(now);
+  setDv('d-eye', currentEye, '');
+
+  // ── Phase 1 preview ───────────────────────────────────────────────────────
+  if (p1Mode) {
+    const angle = +D('p1-angle').value;
+    const cpd   = +D('p1-cpd').value;
+    const color = D('p1-color').value;
+    const type  = D('p1-type').value;
+    renderer.drawGrating({ angleDeg: angle, cpd, distMm, mmPerPx, color, fixationDot: true, type });
+    renderer.drawDebugOverlay({ cpd, distMm, mmPerPx,
+      period: StimulusRenderer.periodPx(cpd, distMm, mmPerPx) });
+    return;
+  }
+
+  // ── Monocular preview canvas ──────────────────────────────────────────────
+  if (appState === 'MONOCULAR_SETUP') {
+    const pc = D('mono-preview');
+    const px = pc.getContext('2d');
+    // Draw mirrored video frame (canvas is CSS-flipped, so draw normal)
+    px.drawImage(video, 0, 0, pc.width, pc.height);
+    const sx = pc.width / vw, sy = pc.height / vh;
+    // Draw face mesh outline (key face-oval landmarks)
+    if (faceLms) {
+      D('mono-face-badge').textContent = 'Face ✓';
+      D('mono-face-badge').style.background = '#00AA55';
+      // Draw iris circles
+      const lI = faceLms[473], rI = faceLms[468];
+      const pd = Math.hypot((rI.x - lI.x) * vw, (rI.y - lI.y) * vh);
+      const R  = Math.max(50, pd * 1.2);
+      // Left iris (in video coords, right side visually due to mirror)
+      px.beginPath(); px.arc(lI.x * vw * sx, lI.y * vh * sy, 6, 0, Math.PI*2);
+      px.strokeStyle = '#00FF88'; px.lineWidth = 2; px.stroke();
+      // Right iris
+      px.beginPath(); px.arc(rI.x * vw * sx, rI.y * vh * sy, 6, 0, Math.PI*2);
+      px.strokeStyle = '#00FF88'; px.lineWidth = 2; px.stroke();
+      // Cover-zone circles around the eye being tested
+      const targetI = currentEye === 'right' ? rI : lI;
+      px.beginPath(); px.arc(targetI.x * vw * sx, targetI.y * vh * sy, R * sx, 0, Math.PI*2);
+      px.strokeStyle = 'rgba(255,200,0,0.5)'; px.lineWidth = 2; px.setLineDash([4,4]); px.stroke();
+      px.setLineDash([]);
+    } else {
+      D('mono-face-badge').textContent = 'No Face';
+      D('mono-face-badge').style.background = '#FF4444';
+    }
+    // Draw hand landmarks
+    for (const hand of lastHands) {
+      for (const lm of hand) {
+        px.beginPath(); px.arc(lm.x * vw * sx, lm.y * vh * sy, 3, 0, Math.PI*2);
+        px.fillStyle = '#FFD700'; px.fill();
+      }
+    }
+  }
+
+  // ── Monocular setup ───────────────────────────────────────────────────────
+  if (appState === 'MONOCULAR_SETUP') {
+    D('cover-bar').style.width = (coverResult.progress * 100) + '%';
+    const ear = currentEye === 'right' ? earR : earL;
+    D('mono-ear').textContent  = faceLms ? ear.toFixed(2) : '—';
+    D('mono-hand').textContent = coverResult.coveredBy || 'none';
+    if (coverResult.ok) {
+      D('cover-status').textContent = '✓ COVERED';
+      D('cover-status').style.color = '#00FF88';
+      setState('MONOCULAR_OK');
+      setTimeout(beginAxisSearch, 400);
+    } else if (coverResult.progress > 0) {
+      D('cover-status').textContent = 'Hold steady…';
+      D('cover-status').style.color = '#FFD700';
+    } else {
+      D('cover-status').textContent = faceLms ? `Cover your ${currentEye.toUpperCase()} eye` : 'No face detected';
+      D('cover-status').style.color = faceLms ? '#aaa' : '#FF4444';
+    }
+    renderer.drawFixation(); return;
+  }
+
+  // ── Axis search (tripole) ─────────────────────────────────────────────────
+  if (appState === 'AXIS') {
+    const elapsed = now - stimStateT;
+    if      (axisStep === 0) { startNextAxisPair(); }
+    else if (axisStep === 1) {
+      renderer.drawFixation(); showLabel('GET READY', '#555');
+      if (elapsed > AXIS_READY_MS) { axisStep = 2; stimStateT = now; }
+    }
+    else if (axisStep === 2) {
+      renderer.drawGrating({ angleDeg: axisPair[0], cpd: AXIS_CPD, distMm, mmPerPx, color: '#0088FF', fixationDot: true, type: 'tripole' });
+      showLabel('FIRST', '#44AAFF');
+      if (elapsed > AXIS_DUR_MS) { axisStep = 3; stimStateT = now; }
+    }
+    else if (axisStep === 3) {
+      renderer.drawFixation(); showLabel('');
+      if (elapsed > AXIS_ISI_MS) {
+        axisStep = 4; stimStateT = now;
+        showLabel('SECOND', '#FF8800');
+        renderer.drawGrating({ angleDeg: axisPair[1], cpd: AXIS_CPD, distMm, mmPerPx, color: '#0088FF', fixationDot: true, type: 'tripole' });
+      }
+    }
+    else if (axisStep === 4) {
+      if (elapsed < AXIS_DUR_MS) {
+        renderer.drawGrating({ angleDeg: axisPair[1], cpd: AXIS_CPD, distMm, mmPerPx, color: '#0088FF', fixationDot: true, type: 'tripole' });
+        showLabel('SECOND', '#FF8800');
+      } else {
+        renderer.drawFixation(); showLabel('');
+        showMsg('Which was SHARPER?   Press  1 (first)  or  2 (second)');
+      }
+    }
+    setDv('d-ax-prog', axisEngine ? `${axisEngine.getProgress().done}/6` : '—');
+    return;
+  }
+
+  // ── MDSF (interleaved dual-meridian) ─────────────────────────────────────
+  if (appState === 'MDSF') {
+    const elapsed = now - stimStateT;
+    const trialAxis = curMeridianTrial?.axis ?? mdsf1Axis;
+    const trialCPD  = curMeridianTrial?.cpd  ?? 3;
+    const meridianLabel = curMeridianTrial?.meridian === 0 ? `${mdsf1Axis}°` : `${mdsf2Axis}°`;
+
+    if (stimState === 'MDSF_ISI') {
+      renderer.drawFixation();
+      if (elapsed > MDSF_ISI_MS) { stimState = 'MDSF_SHOW'; stimStateT = now; }
+
+    } else if (stimState === 'MDSF_SHOW') {
+      const ctx = canvas.getContext('2d');
+      const W = canvas.width, H = canvas.height;
+      ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H);
+      ctx.save();
+      ctx.beginPath();
+      if (mdsfSide === 'left') ctx.rect(0, 0, W/2, H);
+      else                     ctx.rect(W/2, 0, W/2, H);
+      ctx.clip();
+      renderer.drawGrating({ angleDeg: trialAxis, cpd: trialCPD, distMm, mmPerPx, color: '#ffffff', fixationDot: false, type: 'grating' });
+      ctx.restore();
+      // side labels
+      ctx.font = 'bold 18px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+      ctx.fillStyle = 'rgba(255,255,255,0.25)';
+      ctx.fillText('LEFT',  W/4,   14);
+      ctx.fillText('RIGHT', W*3/4, 14);
+      // centre divider
+      ctx.strokeStyle = '#333'; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(W/2,0); ctx.lineTo(W/2,H); ctx.stroke();
+      // fixation cross
+      ctx.strokeStyle = '#666'; ctx.lineWidth = 2; ctx.beginPath();
+      ctx.moveTo(W/2-12,H/2); ctx.lineTo(W/2+12,H/2);
+      ctx.moveTo(W/2,H/2-12); ctx.lineTo(W/2,H/2+12); ctx.stroke();
+      // meridian indicator (top-right)
+      ctx.fillStyle = '#444'; ctx.font = '11px sans-serif'; ctx.textAlign = 'right';
+      ctx.fillText(`axis ${meridianLabel}`, W - 10, 14);
+      if (elapsed > MDSF_DUR_MS) { stimState = 'MDSF_RESPONSE'; stimStateT = now; }
+
+    } else if (stimState === 'MDSF_RESPONSE') {
+      const ctx = canvas.getContext('2d');
+      const W = canvas.width, H = canvas.height;
+      ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H);
+      ctx.strokeStyle = '#333'; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(W/2,0); ctx.lineTo(W/2,H); ctx.stroke();
+      ctx.font = 'bold 18px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+      ctx.fillStyle = 'rgba(255,255,255,0.25)';
+      ctx.fillText('LEFT',  W/4,   14);
+      ctx.fillText('RIGHT', W*3/4, 14);
+      ctx.strokeStyle = '#555'; ctx.lineWidth = 2; ctx.beginPath();
+      ctx.moveTo(W/2-12,H/2); ctx.lineTo(W/2+12,H/2);
+      ctx.moveTo(W/2,H/2-12); ctx.lineTo(W/2,H/2+12); ctx.stroke();
+      showMsg('Which side had the pattern?');
+      D('mdsf-btns').style.display = 'flex';
+      // Auto-advance if no response (counts as wrong, staircase goes easier)
+      if (elapsed > MDSF_TIMEOUT_MS) {
+        const wrongSide = mdsfSide === 'left' ? 'right' : 'left';
+        handleMDSFResponse(wrongSide);
+      }
+
+    } else if (stimState === 'MDSF_FEEDBACK') {
+      renderer.drawFixation();
+      if (elapsed > MDSF_FB_MS) {
+        showLabel('');
+        if (interleavedSC.isDone()) {
+          const t0 = interleavedSC.threshold(0), t1 = interleavedSC.threshold(1);
+          showLabel(`${t0.toFixed(1)} / ${t1.toFixed(1)} CPD`, '#00FF88');
+          setState('MDSF_DONE');
+          setTimeout(() => { showLabel(''); beginFarPoint(1); }, 2000);
+        } else {
+          startMDSFTrial();
+        }
+      }
+    }
+
+    const m0 = curMeridianTrial?.meridian ?? 0;
+    setDv('d-sc-rev', `${interleavedSC?.reversalCount(0) ?? '—'}/${interleavedSC?.reversalCount(1) ?? '—'}`);
+    setDv('d-sc-tri', interleavedSC?.totalTrials ?? '—');
+    setDv('d-sc-cpd', interleavedSC?.currentCPD(m0)?.toFixed(2) ?? '—');
+    return;
+  }
+
+  // ── Far-point walk-back (hold-capture) ───────────────────────────────────
+  if (appState === 'FAR_POINT_1' || appState === 'FAR_POINT_2') {
+    const axisAngle = fpMeridian === 1 ? (foundAxis ?? 0) : ((foundAxis ?? 0) + 90) % 180;
+    renderer.drawGrating({ angleDeg: axisAngle, cpd: fpTargetCPD, distMm, mmPerPx, color: '#ffffff', fixationDot: true, type: 'grating' });
+    if (smoother.isValid()) {
+      D('fp-dist').textContent = `${(distMm / 10).toFixed(0)} cm`;
+    }
+    // Run hold-capture
+    const hc  = fpMeridian === 1 ? holdCapture1 : holdCapture2;
+    if (hc) {
+      const hr = hc.update(distMm, !!faceLms);
+      D('fp-hold-bar').style.width = `${hr.progress * 100}%`;
+      if (hr.captured && appState !== 'FAR_POINT_1_DONE' && appState !== 'FAR_POINT_2_DONE') {
+        autoCaptureFarPoint(hr.distMm);
+      }
+    }
+    return;
+  }
+
+  // ── Default ───────────────────────────────────────────────────────────────
+  renderer.drawFixation();
+}
+
+// ─── Debug helpers ────────────────────────────────────────────────────────────
+function updateDistBadge(cm) {
+  const b = D('dist-badge');
+  if (smoother.isValid() && cm) {
+    b.textContent = `${(+cm).toFixed(0)} cm`;
+    b.className   = (+cm < 25 || +cm > 150) ? 'warn' : 'ok';
+  } else {
+    b.textContent = lastFaceLms ? '…' : 'No face';
+    b.className   = 'err';
+  }
+}
+function updateDebugPanel(faceLms, cm, corMm, raw) {
+  setDv('d-face',   faceLms ? '✓' : '—', faceLms ? 'ok' : 'err');
+  setDv('d-raw',    raw  ? `${raw.toFixed(1)} cm`         : '—');
+  setDv('d-sm',     cm   ? `${(+cm).toFixed(1)} cm`       : '—');
+  setDv('d-cor',    corMm ? `${(corMm/10).toFixed(1)} cm` : '—');
+  const mm = calibrator.mmPerPx ?? 0.18;
+  const d  = corMm ?? (cm ? cm * 10 : 400);
+  setDv('d-maxcpd', StimulusRenderer.maxCPD(d, mm).toFixed(1));
+  setDv('d-quality', reporter ? reporter.score(0,0) + '%' : '—');
+}
+function updateFPS(now) {
+  frameCount++;
+  if (now - lastFpsT >= 1000) { fps = frameCount; frameCount = 0; lastFpsT = now; }
+  setDv('d-fps', fps);
+}
+
+// ─── Boot ─────────────────────────────────────────────────────────────────────
+updateDebugCal();
+if (calibrator.isCalibrated()) startLoading();
+else showOv('ov-display-cal');
+</script>
+</body>
+</html>

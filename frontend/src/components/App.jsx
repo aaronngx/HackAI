@@ -1,23 +1,33 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import Starsfield from "./Starsfield.js";
 import PanelOverlay from "./PanelOverlay.jsx";
-import DoctorModal from "./DoctorModal.jsx";
+import AppleHelloEffect from "./AppleHelloEffect.js";
 import LoginPanelOverlay from "./LoginPanelOverlay.jsx";
 import SignupPanelOverlay from "./SignupPanelOverlay.jsx";
+import DoctorModal from "./DoctorModal.jsx";
 
-const C = {
-  cream: "#f5f2ee",
-  ink: "#1a1410",
-  inkDim: "#6b5f52",
-  brand: "#00c4d4",
-};
+const logo = "/logo.png";
+const utd = "/utd.png";
 
 const featureCards = [
-  { title: "Eye Disease Detect", image: "https://images.unsplash.com/photo-1576091160550-2173dba999ef?w=800&auto=format&fit=crop" },
-  { title: "Eyes Exam", image: "https://images.unsplash.com/photo-1579684385127-1ef15d508118?w=800&auto=format&fit=crop" },
-  { title: "Report", image: "https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=800&auto=format&fit=crop" },
-  { title: "Find Clinic", image: "https://images.unsplash.com/photo-1612349317150-e413f6a5b16d?w=800&auto=format&fit=crop" },
+  {
+    title: "Eye Disease Detect",
+    image: "https://images.unsplash.com/photo-1576091160550-2173dba999ef?w=800&auto=format&fit=crop",
+  },
+  {
+    title: "Eyes Exam",
+    image: "https://images.unsplash.com/photo-1579684385127-1ef15d508118?w=800&auto=format&fit=crop",
+  },
+  {
+    title: "Report",
+    image: "https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=800&auto=format&fit=crop",
+  },
+  {
+    title: "Doctor Find",
+    image: "https://images.unsplash.com/photo-1612349317150-e413f6a5b16d?w=800&auto=format&fit=crop",
+  },
 ];
 
 function FeatureCard({ card, onClick }) {
@@ -26,58 +36,82 @@ function FeatureCard({ card, onClick }) {
   return (
     <motion.div
       onClick={onClick}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-      animate={{ scale: hovered ? 1.02 : 1, boxShadow: hovered ? "0 12px 32px rgba(13,27,46,0.12)" : "0 2px 8px rgba(13,27,46,0.06)" }}
-      transition={{ duration: 0.3, ease: "easeOut" }}
+      onHoverStart={() => setHovered(true)}
+      onHoverEnd={() => setHovered(false)}
       style={{
-        width: 260,
-        minHeight: 320,
-        borderRadius: 16,
+        width: 300,
+        height: 400,
+        borderRadius: 32,
         overflow: "hidden",
+        position: "relative",
         cursor: "pointer",
         flexShrink: 0,
-        background: "#ffffff",
-        border: "1px solid #ccd8ee",
       }}
     >
-      <div
+      <motion.div
+        animate={{ scale: hovered ? 1.06 : 1 }}
+        transition={{ duration: 0.4, ease: [0.32, 0.72, 0, 1] }}
         style={{
-          height: 180,
+          position: "absolute",
+          inset: 0,
           backgroundImage: `url(${card.image})`,
           backgroundSize: "cover",
           backgroundPosition: "center",
         }}
       />
-      <div style={{ padding: 24 }}>
-        <div style={{ fontFamily: "'Bebas Neue'", fontSize: 22, letterSpacing: 2, color: "#0d1b2e", lineHeight: 1.2 }}>
+      <div
+        style={{
+          position: "absolute",
+          inset: 0,
+          background: "linear-gradient(to top, rgba(0,0,0,0.75) 0%, rgba(0,0,0,0.1) 50%, transparent 100%)",
+        }}
+      />
+      <div
+        style={{
+          position: "absolute",
+          bottom: 32,
+          left: 28,
+          right: 28,
+        }}
+      >
+        <div style={{ color: "#fff", fontSize: 22, fontWeight: 700, letterSpacing: "-0.02em", lineHeight: 1.2 }}>
           {card.title}
         </div>
-        <div style={{ fontFamily: "'DM Mono'", fontSize: 11, color: "#4a6280", marginTop: 8, letterSpacing: 1 }}>
+        <motion.div
+          animate={{ opacity: hovered ? 1 : 0, y: hovered ? 0 : 6 }}
+          transition={{ duration: 0.25 }}
+          style={{ color: "rgba(255,255,255,0.7)", fontSize: 13, marginTop: 6, fontWeight: 500 }}
+        >
           Tap to explore →
-        </div>
+        </motion.div>
       </div>
     </motion.div>
   );
 }
 
 export default function App() {
+  const [clicked, setClicked] = useState(false);
   const [activePanelIndex, setActivePanelIndex] = useState(null);
   const [originRect, setOriginRect] = useState(null);
-  const [doctorModalOpen, setDoctorModalOpen] = useState(false);
   const [loginPanelOpen, setLoginPanelOpen] = useState(false);
   const [signupPanelOpen, setSignupPanelOpen] = useState(false);
   const [loginOriginRect, setLoginOriginRect] = useState(null);
   const [signupOriginRect, setSignupOriginRect] = useState(null);
-  const [user, setUser] = useState(null);
+  const [doctorModalOpen, setDoctorModalOpen] = useState(false);
+  const [user, setUser] = useState(() => {
+    if (typeof window === "undefined") return null;
+    try {
+      const storedUser = localStorage.getItem("user");
+      return storedUser ? JSON.parse(storedUser) : null;
+    } catch {
+      return null;
+    }
+  });
   const [isUserOpen, setIsUserOpen] = useState(false);
 
-  useEffect(() => {
-    const storedUser = localStorage.getItem("user");
-    if (storedUser) {
-      setUser(JSON.parse(storedUser));
-    }
-  }, []);
+  const handleHeroClick = () => {
+    setClicked(true);
+  };
 
   const handleLogout = () => {
     localStorage.removeItem("token");
@@ -91,170 +125,341 @@ export default function App() {
     : null;
 
   return (
-    <>
-      <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Mono:wght@400;500&family=Instrument+Serif:ital@0;1&family=DM+Sans:wght@300;400;500;600&display=swap');
-        * { box-sizing: border-box; margin: 0; padding: 0; }
-        body { background: #f0f5fb; font-family: 'DM Sans', sans-serif; }
-        @keyframes fadeUp { from { opacity:0; transform:translateY(12px); } to { opacity:1; transform:translateY(0); } }
-        .fade-up { animation: fadeUp 0.5s ease both; }
-        .report-header { padding: 28px 60px; }
-        .report-body { padding: 48px 60px; max-width: 860px; margin: 0 auto; }
-        .report-footer { padding: 36px 60px; }
-        @media (max-width: 900px) {
-          .report-header { padding: 20px 24px; }
-          .report-body { padding: 28px 20px; }
-          .report-footer { padding: 28px 24px; }
-        }
-      `}</style>
-
-      <div style={{ background: "#f0f5fb", minHeight: "100vh", color: "#0d1b2e", overflowX: "hidden" }}>
-
-        {/* Header — matches disease report */}
-        <div className="fade-up report-header" style={{ background: "#0d1526", borderBottom: "1px solid #1e2d45", position: "relative", overflow: "hidden" }}>
-          <div style={{ position: "absolute", right: 40, top: -10, fontFamily: "'Bebas Neue'", fontSize: 200, color: "rgba(255,255,255,0.03)", lineHeight: 1, userSelect: "none" }}>IRIS</div>
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 16 }}>
-            <div>
-              <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={C.brand} strokeWidth="1.5">
-                  <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" />
-                </svg>
-                <span style={{ fontFamily: "'Bebas Neue'", fontSize: 20, letterSpacing: 4, color: C.cream }}>IRIS</span>
-                <span style={{ fontFamily: "'DM Mono'", fontSize: 10, color: "rgba(255,255,255,0.5)", letterSpacing: 1 }}>EYE HEALTH PLATFORM</span>
+    <div style={{ background: "#000", overflowX: "hidden" }}>      {/* Top Navigation Bar */}
+      <div
+        style={{
+          position: "fixed",
+          top: 0,
+          left: 0,
+          right: 0,
+          zIndex: 200,
+          padding: "16px 32px",
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          background: "rgba(0,0,0,0.3)",
+          backdropFilter: "blur(10px)",
+          borderBottom: "1px solid rgba(255,255,255,0.08)",
+        }}
+      >
+        <h1 style={{ margin: 0, fontSize: 20, fontWeight: 700, color: "#fff" }}>🧠 HackAI</h1>
+        {user ? (
+          <div style={{ position: "relative" }}>
+            <motion.button
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              onClick={() => setIsUserOpen(!isUserOpen)}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+                background: "rgba(255,255,255,0.1)",
+                border: "1px solid rgba(255,255,255,0.2)",
+                borderRadius: 10,
+                padding: "8px 12px",
+                color: "#fff",
+                cursor: "pointer",
+              }}
+            >
+              <div
+                style={{
+                  width: 32,
+                  height: 32,
+                  borderRadius: "50%",
+                  background: "rgba(255,255,255,0.2)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  fontSize: 12,
+                  fontWeight: 700,
+                }}
+              >
+                {initials}
               </div>
-              <div style={{ fontFamily: "'Instrument Serif'", fontSize: 32, color: C.cream, lineHeight: 1.1 }}>Welcome</div>
-              <div style={{ fontFamily: "'DM Mono'", fontSize: 10, color: "rgba(255,255,255,0.5)", marginTop: 6 }}>
-                Your eye health companion
-              </div>
-            </div>
-            {user ? (
-              <div style={{ position: "relative" }}>
+              <span style={{ fontSize: 13, fontWeight: 600 }}>{user.firstName}</span>
+            </motion.button>
+            {isUserOpen && (
+              <div
+                style={{
+                  position: "absolute",
+                  top: "100%",
+                  right: 0,
+                  marginTop: 8,
+                  background: "rgba(15,15,15,0.95)",
+                  border: "1px solid rgba(255,255,255,0.1)",
+                  borderRadius: 12,
+                  overflow: "hidden",
+                  minWidth: 200,
+                }}
+              >
+                <div style={{ padding: "12px 16px", borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
+                  <p style={{ margin: 0, color: "#fff", fontSize: 13, fontWeight: 600 }}>
+                    {user.firstName} {user.lastName}
+                  </p>
+                  <p style={{ margin: 0, color: "#888", fontSize: 12, marginTop: 4 }}>{user.email}</p>
+                </div>
                 <motion.button
-                  whileHover={{ scale: 1.02 }}
-                  whileTap={{ scale: 0.98 }}
-                  onClick={() => setIsUserOpen(!isUserOpen)}
+                  whileHover={{ background: "rgba(255,255,255,0.05)" }}
+                  onClick={handleLogout}
                   style={{
-                    display: "flex", alignItems: "center", gap: 8,
-                    background: "rgba(255,255,255,0.1)", border: "1px solid rgba(255,255,255,0.2)",
-                    borderRadius: 12, padding: "10px 16px", color: C.cream, cursor: "pointer",
+                    width: "100%",
+                    padding: "12px 16px",
+                    background: "none",
+                    border: "none",
+                    color: "#ff6b6b",
+                    fontSize: 13,
+                    fontWeight: 600,
+                    cursor: "pointer",
+                    textAlign: "left",
                   }}
                 >
-                  <div style={{ width: 28, height: 28, borderRadius: "50%", background: "rgba(255,255,255,0.2)", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'DM Mono'", fontSize: 11 }}>
-                    {initials}
-                  </div>
-                  <span style={{ fontFamily: "'DM Sans'", fontSize: 13 }}>{user.firstName}</span>
-                </motion.button>
-                {isUserOpen && (
-                  <div style={{
-                    position: "absolute", top: "100%", right: 0, marginTop: 8,
-                    background: "#1e2d45", border: "1px solid #2d3f5c", borderRadius: 12,
-                    overflow: "hidden", minWidth: 200, zIndex: 100,
-                  }}>
-                    <div style={{ padding: "12px 16px", borderBottom: "1px solid #2d3f5c" }}>
-                      <p style={{ margin: 0, color: C.cream, fontFamily: "'DM Sans'", fontSize: 13 }}>{user.firstName} {user.lastName}</p>
-                      <p style={{ margin: 0, color: "rgba(255,255,255,0.5)", fontSize: 12, marginTop: 4 }}>{user.email}</p>
-                    </div>
-                    <button onClick={handleLogout} style={{
-                      width: "100%", padding: "12px 16px", background: "none", border: "none",
-                      color: "#e07a7a", fontFamily: "'DM Mono'", fontSize: 12, cursor: "pointer", textAlign: "left",
-                    }}>Logout</button>
-                  </div>
-                )}
-              </div>
-            ) : (
-              <div style={{ display: "flex", gap: 12 }}>
-                <motion.button
-                  whileHover={{ scale: 1.02 }}
-                  whileTap={{ scale: 0.98 }}
-                  onClick={(e) => {
-                    setSignupPanelOpen(false);
-                    setLoginOriginRect(e.currentTarget.getBoundingClientRect());
-                    setLoginPanelOpen(true);
-                  }}
-                  style={{
-                    padding: "10px 20px", background: "transparent", border: "1px solid rgba(255,255,255,0.3)",
-                    borderRadius: 12, color: C.cream, fontFamily: "'DM Mono'", fontSize: 12, cursor: "pointer",
-                  }}
-                >
-                  Login
-                </motion.button>
-                <motion.button
-                  whileHover={{ scale: 1.02 }}
-                  whileTap={{ scale: 0.98 }}
-                  onClick={(e) => {
-                    setLoginPanelOpen(false);
-                    setSignupOriginRect(e.currentTarget.getBoundingClientRect());
-                    setSignupPanelOpen(true);
-                  }}
-                  style={{
-                    padding: "10px 20px", borderRadius: 12, border: "none", cursor: "pointer",
-                    background: `linear-gradient(135deg, ${C.brand}, #0090a0)`,
-                    color: "#fff", fontFamily: "'Bebas Neue'", fontSize: 16, letterSpacing: 2,
-                  }}
-                >
-                  Sign Up
+                  🚪 Logout
                 </motion.button>
               </div>
             )}
           </div>
-        </div>
-
-        {/* Hero / Description */}
-        <div className="report-body" style={{ paddingTop: 48, paddingBottom: 32 }}>
+        ) : (
+          <div style={{ display: "flex", gap: 12 }}>
+            <motion.button
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              onClick={(e) => {
+                setSignupPanelOpen(false);
+                setLoginOriginRect(e.currentTarget.getBoundingClientRect());
+                setLoginPanelOpen(true);
+              }}
+              style={{
+                padding: "8px 18px",
+                background: "rgba(255,255,255,0.1)",
+                border: "1px solid rgba(255,255,255,0.2)",
+                borderRadius: 8,
+                color: "#fff",
+                fontSize: 13,
+                fontWeight: 600,
+                cursor: "pointer",
+              }}
+            >
+              Login
+            </motion.button>
+            <motion.button
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              onClick={(e) => {
+                setLoginPanelOpen(false);
+                setSignupOriginRect(e.currentTarget.getBoundingClientRect());
+                setSignupPanelOpen(true);
+              }}
+              style={{
+                padding: "8px 18px",
+                background: "#fff",
+                border: "none",
+                borderRadius: 8,
+                color: "#000",
+                fontSize: 13,
+                fontWeight: 700,
+                cursor: "pointer",
+              }}
+            >
+              Sign Up
+            </motion.button>
+          </div>
+        )}
+      </div>
+      <AnimatePresence>
+        {!clicked && (
           <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5, delay: 0.1 }}
-            style={{ background: "#ffffff", borderRadius: 16, padding: 32, border: "1px solid #ccd8ee", boxShadow: "0 1px 4px rgba(13,27,46,0.05)", marginBottom: 40 }}
+            key="hero"
+            exit={{ scale: 1.6, opacity: 0 }}
+            transition={{ duration: 0.6, ease: "easeInOut" }}
+            style={{ position: "fixed", inset: 0, zIndex: 50 }}
           >
-            <div style={{ fontFamily: "'DM Mono'", fontSize: 10, color: "#4a6280", letterSpacing: 2, textTransform: "uppercase", marginBottom: 12 }}>About Iris</div>
-            <div style={{ fontFamily: "'Instrument Serif'", fontSize: 24, color: "#0d1b2e", lineHeight: 1.4, marginBottom: 16 }}>
-              Your AI-powered eye health companion
-            </div>
-            <p style={{ fontSize: 14, color: "#4a6280", lineHeight: 1.7 }}>
-              Iris helps you understand eye symptoms, screen for common conditions, and connect with eye care professionals. Explore disease detection, virtual exams, reports, and find doctors near you.
-            </p>
-          </motion.div>
-
-          {/* Feature Cards */}
-          <div style={{ fontFamily: "'DM Mono'", fontSize: 10, color: "#4a6280", letterSpacing: 2, textTransform: "uppercase", marginBottom: 20 }}>Explore</div>
-          <div style={{ display: "flex", gap: 24, flexWrap: "wrap", justifyContent: "center" }}>
-            {featureCards.map((card, i) => (
-              <FeatureCard
-                key={i}
-                card={card}
-                onClick={(e) => {
-                  if (i === 3) {
-                    setDoctorModalOpen(true);
-                  } else {
-                    setOriginRect(e.currentTarget.getBoundingClientRect());
-                    setActivePanelIndex(i);
-                  }
-                }}
+            <Starsfield
+              starCount={150}
+              speed={0.2}
+              trail={0.3}
+              twinkle={0.3}
+              starSize={3}
+              bgColor="#000000"
+              starColor="#ffffff"
+              starImage={logo}
+              preserveImageColors
+            />
+            <div style={{ position: "absolute", inset: 0 }}>
+              <Starsfield
+                starCount={150}
+                speed={0.2}
+                trail={0.3}
+                twinkle={0.3}
+                starSize={3}
+                bgColor="rgba(0,0,0,0)"
+                starColor="#ffffff"
+                starImage={utd}
+                preserveImageColors
               />
-            ))}
-          </div>
-        </div>
-
-        {/* Footer — matches disease report */}
-        <div className="report-footer" style={{ background: "#ffffff", borderTop: "1px solid #ccd8ee" }}>
-          <div style={{ maxWidth: 860, margin: "0 auto" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 16 }}>
-              <p style={{ fontFamily: "'DM Mono'", fontSize: 10, color: "#8098b8", lineHeight: 1.7, maxWidth: 560 }}>
-                Iris is an AI-powered eye health platform. It does not replace professional medical advice. Always consult a qualified eye care professional.
-              </p>
-              <div style={{ fontFamily: "'DM Mono'", fontSize: 12, color: "#8098b8", letterSpacing: "0.1em" }}>HACKAI © 2026</div>
             </div>
-          </div>
+
+            <div
+              style={{
+                position: "absolute",
+                inset: 0,
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                justifyContent: "center",
+                zIndex: 10,
+                gap: 32,
+              }}
+            >
+              <motion.div
+                animate={clicked ? { scale: 2.5, opacity: 0 } : { scale: 1, opacity: 1 }}
+                transition={{ duration: 0.5, ease: "easeInOut" }}
+                onClick={handleHeroClick}
+                style={{ cursor: "pointer" }}
+              />
+
+              <AnimatePresence>
+                {!clicked && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ delay: 0.5, duration: 0.8 }}
+                    style={{ pointerEvents: "none" }}
+                  >
+                    <AppleHelloEffect
+                      size={120}
+                      duration={1.2}
+                      strokeWidth={10}
+                      strokeColor="rgba(255,255,255,0.85)"
+                      autoPlay={true}
+                      loop={false}
+                      onAnimationComplete={handleHeroClick}
+                    />
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+
+            <AnimatePresence>
+              {!clicked && (
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 0.4, y: [0, 8, 0] }}
+                  exit={{ opacity: 0 }}
+                  transition={{ delay: 1.5, duration: 1.5, repeat: Infinity }}
+                  style={{
+                    position: "absolute",
+                    bottom: 32,
+                    left: "50%",
+                    transform: "translateX(-50%)",
+                    color: "#fff",
+                    fontSize: 22,
+                    zIndex: 10,
+                  }}
+                >
+                  ↓
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Description Section */}
+      <div
+        style={{
+          width: "100vw",
+          minHeight: "100vh",
+          background: "#000",
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          justifyContent: "center",
+          padding: "80px 24px",
+        }}
+      >
+        <motion.div
+          initial={{ opacity: 0, y: 60 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: false, amount: 0.3 }}
+          transition={{ duration: 0.9, ease: "easeOut" }}
+          style={{ maxWidth: 760, textAlign: "center" }}
+        >
+          <p style={{ color: "#888", fontSize: 12, letterSpacing: "0.25em", marginBottom: 20, textTransform: "uppercase" }}>
+            Lorem ipsum dolor
+          </p>
+          <h2
+            style={{
+              color: "#fff",
+              fontSize: "clamp(32px, 5vw, 64px)",
+              fontWeight: 700,
+              lineHeight: 1.1,
+              marginBottom: 28,
+              letterSpacing: "-0.02em",
+            }}
+          >
+            Lorem ipsum dolor sit amet consectetur.
+          </h2>
+          <p
+            style={{
+              color: "#aaa",
+              fontSize: "clamp(15px, 2vw, 19px)",
+              lineHeight: 1.7,
+            }}
+          >
+            Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.
+          </p>
+        </motion.div>
+      </div>
+
+      {/* Feature Cards */}
+      <div
+        style={{
+          width: "100vw",
+          background: "#000",
+          display: "flex",
+          justifyContent: "center",
+          alignItems: "center",
+          padding: "80px 24px",
+        }}
+      >
+        <div
+          style={{
+            display: "flex",
+            gap: 16,
+            flexWrap: "wrap",
+            justifyContent: "center",
+          }}
+        >
+          {featureCards.map((card, i) => (
+            <FeatureCard
+              key={i}
+              card={card}
+              onClick={(e) => {
+                if (i === 2) {
+                  window.location.href = "/report/disease";
+                  return;
+                }
+                if (i === 3) {
+                  setDoctorModalOpen(true);
+                  return;
+                }
+                setOriginRect(e.currentTarget.getBoundingClientRect());
+                setActivePanelIndex(i);
+              }}
+            />
+          ))}
         </div>
       </div>
 
+      {/* Doctor finder modal on top of home */}
       <AnimatePresence>
         {doctorModalOpen && (
           <DoctorModal onClose={() => setDoctorModalOpen(false)} />
         )}
       </AnimatePresence>
 
+      {/* Panel Overlay */}
       <AnimatePresence>
         {activePanelIndex !== null && (
           <PanelOverlay
@@ -266,6 +471,27 @@ export default function App() {
         )}
       </AnimatePresence>
 
+      {/* Message dropdown */}
+      <AnimatePresence>
+      </AnimatePresence>
+
+      {/* Fixed social menu is in the global layout */}
+
+      {/* Footer */}
+      <div
+        style={{
+          padding: "32px",
+          textAlign: "center",
+          color: "#444",
+          fontSize: 12,
+          letterSpacing: "0.1em",
+          background: "#000",
+        }}
+      >
+        HACKAI © 2026
+      </div>
+
+      {/* Auth Panels */}
       <AnimatePresence>
         {loginPanelOpen && (
           <LoginPanelOverlay
@@ -293,6 +519,6 @@ export default function App() {
           />
         )}
       </AnimatePresence>
-    </>
+    </div>
   );
 }

@@ -2,6 +2,9 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 
+const VISION_CORRECTION_OPTIONS = ["glasses", "contacts", "neither", "both", "not sure"];
+const EYE_CONDITION_OPTIONS = ["myopia", "atigmatism", "dry eyes", "other"];
+
 export default function AuthModals({ initialPanel = null, onClose }) {
   const [activePanel, setActivePanel] = useState(initialPanel);
   const [formData, setFormData] = useState({
@@ -9,6 +12,9 @@ export default function AuthModals({ initialPanel = null, onClose }) {
     lastName: "",
     email: "",
     password: "",
+    age: "",
+    visionCorrection: "",
+    eyeConditions: [],
   });
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -35,7 +41,15 @@ export default function AuthModals({ initialPanel = null, onClose }) {
       }
 
       setError("");
-      setFormData({ firstName: "", lastName: "", email: "", password: "" });
+      setFormData({
+        firstName: "",
+        lastName: "",
+        email: "",
+        password: "",
+        age: "",
+        visionCorrection: "",
+        eyeConditions: [],
+      });
       setActivePanel("login");
     } catch (err) {
       setError(err.message || "An error occurred");
@@ -320,6 +334,93 @@ export default function AuthModals({ initialPanel = null, onClose }) {
                     />
                   </div>
 
+                  <div>
+                    <label style={{ color: "#aaa", fontSize: 12, display: "block", marginBottom: 6 }}>
+                      What&apos;s your age?
+                    </label>
+                    <input
+                      type="number"
+                      min="1"
+                      max="120"
+                      required
+                      value={formData.age}
+                      onChange={(e) => setFormData({ ...formData, age: e.target.value })}
+                      style={{
+                        width: "100%",
+                        padding: "12px 16px",
+                        background: "rgba(255,255,255,0.05)",
+                        border: "1px solid rgba(255,255,255,0.1)",
+                        borderRadius: 10,
+                        color: "#fff",
+                        fontSize: 14,
+                        boxSizing: "border-box",
+                      }}
+                      placeholder="e.g. 24"
+                    />
+                  </div>
+
+                  <div>
+                    <label style={{ color: "#aaa", fontSize: 12, display: "block", marginBottom: 6 }}>
+                      Do you wear glasses or contacts?
+                    </label>
+                    <select
+                      required
+                      value={formData.visionCorrection}
+                      onChange={(e) => setFormData({ ...formData, visionCorrection: e.target.value })}
+                      style={{
+                        width: "100%",
+                        padding: "12px 16px",
+                        background: "rgba(255,255,255,0.05)",
+                        border: "1px solid rgba(255,255,255,0.1)",
+                        borderRadius: 10,
+                        color: "#fff",
+                        fontSize: 14,
+                        boxSizing: "border-box",
+                      }}
+                    >
+                      <option value="" disabled>
+                        Select one
+                      </option>
+                      {VISION_CORRECTION_OPTIONS.map((option) => (
+                        <option key={option} value={option} style={{ color: "#111" }}>
+                          {option}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label style={{ color: "#aaa", fontSize: 12, display: "block", marginBottom: 8 }}>
+                      Any known eye conditions?
+                    </label>
+                    <div style={{ display: "grid", gap: 8 }}>
+                      {EYE_CONDITION_OPTIONS.map((condition) => (
+                        <label
+                          key={condition}
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: 8,
+                            color: "#ddd",
+                            fontSize: 13,
+                          }}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={formData.eyeConditions.includes(condition)}
+                            onChange={(e) => {
+                              const nextConditions = e.target.checked
+                                ? [...formData.eyeConditions, condition]
+                                : formData.eyeConditions.filter((item) => item !== condition);
+                              setFormData({ ...formData, eyeConditions: nextConditions });
+                            }}
+                          />
+                          {condition}
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+
                   <motion.button
                     whileHover={{ scale: 1.04 }}
                     whileTap={{ scale: 0.97 }}
@@ -465,7 +566,7 @@ export default function AuthModals({ initialPanel = null, onClose }) {
                 </form>
 
                 <p style={{ color: "#666", fontSize: 14, marginTop: 20, textAlign: "center" }}>
-                  Don't have an account?{" "}
+                  Don&apos;t have an account?{" "}
                   <button
                     onClick={() => {
                       setError("");
