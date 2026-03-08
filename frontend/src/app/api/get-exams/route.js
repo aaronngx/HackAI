@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getDb } from "@/lib/mongodb";
+import { getEyeExamsByUser } from "@/lib/eyeExamResults";
 
 function userIdFromToken(token) {
   if (!token || typeof token !== "string") return null;
@@ -8,7 +8,6 @@ function userIdFromToken(token) {
     const parts = decoded.split(":");
     if (parts.length < 2) return null;
     const id = parts[0];
-    // Basic sanity: MongoDB ObjectId is 24 hex chars
     if (!/^[a-f0-9]{24}$/i.test(id)) return null;
     return id;
   } catch {
@@ -18,20 +17,17 @@ function userIdFromToken(token) {
 
 export async function GET(request) {
   try {
-    const token = request.nextUrl.searchParams.get("token");
-    const userId = userIdFromToken(token);
+    const params = request.nextUrl.searchParams;
+    const token  = params.get("token");
+    const eye    = params.get("eye") || undefined; // optional: 'left' or 'right'
+    const limit  = Math.min(100, parseInt(params.get("limit") || "50", 10));
 
+    const userId = userIdFromToken(token);
     if (!userId) {
       return NextResponse.json({ success: false, error: "Not authenticated." }, { status: 401 });
     }
 
-    const db = await getDb();
-    const exams = await db
-      .collection("exam_results")
-      .find({ userId })
-      .sort({ createdAt: -1 })
-      .limit(50)
-      .toArray();
+    const exams = await getEyeExamsByUser(userId, { limit, eye });
 
     return NextResponse.json({
       success: true,

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getDb } from "@/lib/mongodb";
+import { insertEyeExamResult } from "@/lib/eyeExamResults";
 
 function userIdFromToken(token) {
   if (!token || typeof token !== "string") return null;
@@ -8,7 +8,6 @@ function userIdFromToken(token) {
     const parts = decoded.split(":");
     if (parts.length < 2) return null;
     const id = parts[0];
-    // Basic sanity: MongoDB ObjectId is 24 hex chars
     if (!/^[a-f0-9]{24}$/i.test(id)) return null;
     return id;
   } catch {
@@ -21,14 +20,9 @@ export async function POST(request) {
     const body = await request.json();
     const { token, ...examData } = body;
 
-    const userId = userIdFromToken(token);
+    const userId = userIdFromToken(token) || "anonymous";
 
-    const db = await getDb();
-    const result = await db.collection("exam_results").insertOne({
-      userId: userId || "anonymous",
-      createdAt: new Date(),
-      ...examData,
-    });
+    const result = await insertEyeExamResult(examData, { userId });
 
     return NextResponse.json({ success: true, id: result.insertedId.toString() });
   } catch (error) {

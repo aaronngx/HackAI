@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Astigmatism Screening</title>
+  <title>🧠 HackAI — Eye Screening</title>
   <style>
     *{margin:0;padding:0;box-sizing:border-box;}
     body{background:#000;color:#e0e0e0;font-family:'Segoe UI',system-ui,sans-serif;height:100vh;overflow:hidden;display:flex;flex-direction:column;}
@@ -88,10 +88,31 @@
 <body>
 
 <header>
-  <h1>Astigmatism Screening</h1>
+  <h1>🧠 HackAI</h1>
   <span id="phase-badge">INIT</span>
   <button class="btn btn-gray" id="btn-debug-toggle" style="margin-left:8px;">Debug</button>
   <button class="btn btn-gray" id="btn-recal" style="margin-left:4px;font-size:11px;padding:3px 8px;">Recalibrate</button>
+
+  <!-- Voice input button -->
+  <button id="btn-mic" title="Talk to Iris"
+    style="margin-left:auto;background:#1a1a2a;border:1px solid #333;border-radius:20px;
+    color:#888;padding:4px 14px;font-size:12px;cursor:pointer;display:flex;align-items:center;gap:6px;">
+    <span id="mic-icon">🎤</span>
+    <span id="mic-label">Talk to Iris</span>
+  </button>
+
+  <!-- Live transcript bubble -->
+  <div id="iris-transcript" style="display:none;position:fixed;bottom:80px;right:16px;
+    max-width:300px;background:rgba(10,10,20,0.95);border:1px solid #2255FF;
+    border-radius:12px;padding:10px 14px;font-size:12px;color:#ccc;z-index:200;
+    pointer-events:none;">
+    <div style="font-size:10px;color:#2255FF;font-weight:700;margin-bottom:4px;">YOU</div>
+    <div id="iris-user-text" style="color:#fff;"></div>
+    <div id="iris-reply-wrap" style="display:none;margin-top:8px;padding-top:8px;border-top:1px solid #222;">
+      <div style="font-size:10px;color:#00FF88;font-weight:700;margin-bottom:4px;">IRIS</div>
+      <div id="iris-reply-text" style="color:#ccc;"></div>
+    </div>
+  </div>
 </header>
 
 <main>
@@ -124,6 +145,29 @@
     <div style="color:#FF4444;font-size:16px;font-weight:800;">Face not detected</div>
     <div style="color:#aaa;font-size:12px;margin-top:4px;">Look at the camera — test paused</div>
   </div>
+
+  <!-- ═══ OVERLAY: Cover lost (shown mid-test if eye becomes uncovered) ═══ -->
+  <div class="ov hidden" id="ov-cover-lost" style="z-index:90;">
+    <h2 style="color:#FF8800;">👁 Cover Your Eye</h2>
+    <p>Your <strong id="cover-lost-eye">RIGHT</strong> eye became uncovered.<br>
+       The test is paused. Cover it again to continue from where you left off.</p>
+    <div style="position:relative;display:inline-block;margin:8px 0;">
+      <canvas id="cover-lost-preview" width="280" height="210"
+        style="border-radius:10px;background:#111;display:block;transform:scaleX(-1);"></canvas>
+      <div id="cover-lost-face-badge" style="position:absolute;top:6px;left:6px;font-size:11px;
+        font-weight:700;padding:3px 8px;border-radius:6px;background:#FF4444;color:#fff;">No Face</div>
+    </div>
+    <div id="cover-lost-status" style="font-size:20px;font-weight:800;color:#FFD700;">—</div>
+    <div style="width:260px;height:8px;background:#222;border-radius:4px;overflow:hidden;">
+      <div id="cover-lost-bar" style="height:100%;background:#FF8800;width:0%;transition:width .05s;"></div>
+    </div>
+    <p class="note">Hold your hand over your <span id="cover-lost-eye2">right</span> eye until the bar fills.</p>
+  </div>
+
+  <!-- persistent cover indicator (top-left during active test) -->
+  <div id="cover-indicator" style="display:none;position:absolute;top:14px;left:14px;
+    font-size:11px;font-weight:700;padding:3px 10px;border-radius:6px;
+    pointer-events:none;z-index:50;">covered</div>
 
   <!-- ═══ OVERLAY: Display calibration ═══ -->
   <div class="ov" id="ov-display-cal">
@@ -462,7 +506,7 @@ let   renderer   = null;
   async function _flush() {
     if (_speaking || _queue.length === 0) return;
     _speaking = true;
-    const text = _queue.shift();
+    const { text, onDone } = _queue.shift();
     try {
       const res = await fetch('/api/tts', {
         method: 'POST',
@@ -481,12 +525,17 @@ let   renderer   = null;
       }
     } catch { /* silently ignore */ }
     _speaking = false;
+    // Fire done callback only when queue is now empty (all speech finished)
+    if (_queue.length === 0 && typeof onDone === 'function') onDone();
     _flush();
   }
 
-  window.irisSpeak = function (text) {
-    if (localStorage.getItem('irisGuidanceEnabled') !== 'true') return;
-    _queue = [text]; // replace queued lines so we always say the most relevant thing
+  window.irisSpeak = function (text, onDone) {
+    if (localStorage.getItem('irisGuidanceEnabled') !== 'true') {
+      if (typeof onDone === 'function') onDone();
+      return;
+    }
+    _queue = [{ text, onDone }]; // replace queue so we always say the most relevant thing
     _flush();
   };
   window.irisClear = function () { _queue = []; };
@@ -536,6 +585,18 @@ let lightStatus = null;         // Stage 1: 'ok' | 'dark' | 'bright' | null
 let headLostT    = null;
 let headGated    = false;
 let lastFrameT   = performance.now();
+
+// Cover-gating
+let coverLostT   = null;
+let coverGated   = false;
+let coverExiting = false;
+const COVER_GATE_MS = 800; // ms of uncovered before pausing test
+
+// State saved when cover is lost mid-test (restored on re-cover)
+let preCoverAppState  = null;
+let preCoverStimState = null;
+let preCoverElapsed   = 0;
+const coverLostEnforcer = new MonocularEnforcer({ sustainMs: 600 });
 let lastDistMm   = 400;
 
 // MediaPipe / camera
@@ -560,7 +621,7 @@ resizeCanvas();
 
 // ─── Overlay helpers ─────────────────────────────────────────────────────────
 const OV_IDS = ['ov-display-cal','ov-loading','ov-monocular','ov-axis-pos','ov-axis-intro',
-                 'ov-mdsf-intro','ov-farpoint','ov-results'];
+                 'ov-mdsf-intro','ov-farpoint','ov-results','ov-cover-lost'];
 function showOv(id)  { OV_IDS.forEach(o => D(o).classList.toggle('hidden', o !== id)); }
 function hideAllOv() { OV_IDS.forEach(o => D(o).classList.add('hidden')); }
 
@@ -1262,7 +1323,71 @@ function resetEyeState() {
   showLabel(''); showMsg(''); setProgress('');
   smoother.reset(); enforcer.reset(); reporter.reset();
   headLostT = null; headGated = false;
-  D('head-toast').style.display = 'none';
+  coverLostT = null; coverGated = false; coverExiting = false;
+  preCoverAppState = null; preCoverStimState = null; preCoverElapsed = 0;
+  coverLostEnforcer.reset();
+  D('head-toast').style.display      = 'none';
+  D('cover-indicator').style.display = 'none';
+}
+
+// ─── Cover-lost enter / exit ──────────────────────────────────────────────────
+function enterCoverLost() {
+  // Save exactly where we are so we can resume
+  preCoverAppState  = appState;
+  preCoverStimState = stimState;
+  preCoverElapsed   = performance.now() - stimStateT;
+
+  // Hide any floating panels that might be showing
+  D('mdsf-btns').style.display  = 'none';
+  D('fp-float').style.display   = 'none';
+  D('axpos-float').style.display = 'none';
+
+  // Update overlay labels
+  D('cover-lost-eye').textContent  = currentEye.toUpperCase();
+  D('cover-lost-eye2').textContent = currentEye;
+  D('cover-lost-bar').style.width  = '0%';
+  D('cover-lost-status').textContent = `Cover your ${currentEye.toUpperCase()} eye`;
+  D('cover-lost-status').style.color = '#aaa';
+
+  coverLostEnforcer.reset();
+  showOv('ov-cover-lost');
+  setState('COVER_LOST');
+  irisSpeak(`Test paused. Please cover your ${currentEye} eye to continue.`);
+}
+
+function exitCoverLost() {
+  coverGated    = false;
+  coverLostT    = null;
+  coverExiting  = false;
+
+  // Restore app state
+  appState = preCoverAppState;
+  D('phase-badge').textContent = appState;
+
+  // Reset stimulus timer from now — don't restore old elapsed so MDSF/axis
+  // timeouts don't fire instantly after resuming a long-paused state.
+  stimStateT = performance.now();
+
+  // Map back to a safe sub-state for each resumable stage
+  if (appState === 'MDSF') {
+    stimState = 'MDSF_ISI'; // start with a blank inter-stimulus interval
+  } else if (appState === 'AXIS') {
+    stimState = preCoverStimState;
+    axisStep  = 0;           // restart current pair from the beginning
+  } else {
+    stimState = preCoverStimState;
+  }
+
+  // Re-show floating panels that enterCoverLost() hid
+  if (appState === 'FAR_POINT_1' || appState === 'FAR_POINT_2') {
+    D('fp-float').style.display = 'block';
+  }
+  if (appState === 'AXIS_CHECK_POS') {
+    D('axpos-float').style.display = 'block';
+  }
+
+  hideAllOv();
+  irisSpeak('Eye covered. Continuing the test.');
 }
 
 D('btn-other-eye').onclick = () => {
@@ -1347,6 +1472,67 @@ function renderLoop(ts) {
     D('head-toast').style.display = 'none';
   }
 
+  // EAR — computed once here, used by both cover monitoring and monocular detection below
+  const earL = faceLms ? computeEAR(faceLms, L_EAR_IDX) : 0.3;
+  const earR = faceLms ? computeEAR(faceLms, R_EAR_IDX) : 0.3;
+
+  // ── Simple cover detection ────────────────────────────────────────────────
+  // Uses lastFaceLms so it survives frames where hand occludes face detection.
+  // Large radius (pd * 1.5) + low threshold (2 landmarks) — same logic that
+  // already works reliably in the monocular setup stage.
+  function isEyeCoveredNow(targetEye) {
+    const ref = faceLms || lastFaceLms;
+    if (!ref || !ref[468] || !ref[473]) return false;
+    const lIris = { x: ref[473].x * vw, y: ref[473].y * vh };
+    const rIris = { x: ref[468].x * vw, y: ref[468].y * vh };
+    const pd    = Math.hypot(rIris.x - lIris.x, rIris.y - lIris.y);
+    const R     = Math.max(60, pd * 1.5);
+    const tgt   = targetEye === 'right' ? rIris : lIris;
+    for (const hand of lastHands) {
+      let n = 0;
+      for (const lm of hand) {
+        if (Math.hypot(lm.x * vw - tgt.x, lm.y * vh - tgt.y) <= R) n++;
+      }
+      if (n >= 2) return true;
+    }
+    const ear = targetEye === 'left' ? earL : earR;
+    return ear < 0.15;
+  }
+
+  // ── Continuous cover monitoring (active test phases) ─────────────────────
+  const COVER_ACTIVE = ['AXIS_CHECK_POS','AXIS','MDSF','FAR_POINT_1','FAR_POINT_2'];
+  if (COVER_ACTIVE.includes(appState)) {
+    const eyeCoveredNow = isEyeCoveredNow(currentEye);
+
+    // Grace period → then enter cover-lost overlay
+    if (!eyeCoveredNow) {
+      if (!coverLostT) coverLostT = now;
+      if (now - coverLostT > COVER_GATE_MS && !coverGated) {
+        coverGated = true;
+        enterCoverLost();
+      }
+    } else {
+      coverLostT = null;
+      coverGated = false;
+    }
+
+    // Persistent indicator badge (top-left)
+    const ind = D('cover-indicator');
+    ind.style.display = 'block';
+    if (coverLostT && !coverGated) {
+      ind.textContent      = '👁 Cover eye…';
+      ind.style.background = '#AA6600';
+      ind.style.color      = '#fff';
+    } else if (!coverGated) {
+      ind.textContent      = '👁 Covered ✓';
+      ind.style.background = '#004422';
+      ind.style.color      = '#00FF88';
+    }
+  } else if (appState !== 'COVER_LOST') {
+    coverLostT = null; coverGated = false;
+    D('cover-indicator').style.display = 'none';
+  }
+
   // ── Monocular cover detection (lenient) ───────────────────────────────────
   let coverState = { left: null, right: null };
   if (faceLms && faceLms[468] && faceLms[473]) {
@@ -1366,8 +1552,6 @@ function renderLoop(ts) {
       if (rc >= 2 && !coverState.right) coverState.right = label;
     }
   }
-  const earL = faceLms ? computeEAR(faceLms, L_EAR_IDX) : 0.3;
-  const earR = faceLms ? computeEAR(faceLms, R_EAR_IDX) : 0.3;
   if (!coverState.left  && earL < 0.15) coverState.left  = 'closed';
   if (!coverState.right && earR < 0.15) coverState.right = 'closed';
   const coverResult = enforcer.update(coverState, currentEye, earL, earR);
@@ -1376,6 +1560,75 @@ function renderLoop(ts) {
   updateDebugPanel(faceLms, smoothedCm, correctedMm, rawDist);
   updateFPS(now);
   setDv('d-eye', currentEye, '');
+
+  // ── Cover-lost overlay (mid-test eye-uncovered recovery) ─────────────────
+  if (appState === 'COVER_LOST') {
+    renderer.drawFixation();
+
+    // Live webcam preview inside overlay
+    const pc  = D('cover-lost-preview');
+    const px  = pc.getContext('2d');
+    px.drawImage(video, 0, 0, pc.width, pc.height);
+    const sx  = pc.width / vw, sy = pc.height / vh;
+
+    if (faceLms) {
+      D('cover-lost-face-badge').textContent = 'Face ✓';
+      D('cover-lost-face-badge').style.background = '#00AA55';
+      // Highlight the target iris
+      const targetIris = currentEye === 'right' ? faceLms[468] : faceLms[473];
+      px.beginPath();
+      px.arc(targetIris.x * vw * sx, targetIris.y * vh * sy, 10, 0, Math.PI * 2);
+      px.strokeStyle = '#FF8800'; px.lineWidth = 3; px.stroke();
+      // Draw hand landmarks if present
+      for (const hand of lastHands) {
+        for (const lm of hand) {
+          px.beginPath();
+          px.arc(lm.x * vw * sx, lm.y * vh * sy, 3, 0, Math.PI * 2);
+          px.fillStyle = '#FFD700'; px.fill();
+        }
+      }
+    } else {
+      D('cover-lost-face-badge').textContent = 'No Face';
+      D('cover-lost-face-badge').style.background = '#FF4444';
+    }
+
+    // Detect cover — same simple helper used by continuous monitoring
+    const coveredInLost = isEyeCoveredNow(currentEye);
+
+    // Live badge feedback so user can see what's detected
+    const refFace = faceLms || lastFaceLms;
+    D('cover-lost-face-badge').textContent  = !refFace    ? 'No Face'
+                                            : coveredInLost ? 'Covered ✓'
+                                            :                 'Cover your eye';
+    D('cover-lost-face-badge').style.background = !refFace      ? '#FF4444'
+                                                : coveredInLost ? '#00AA55'
+                                                :                 '#AA5500';
+
+    // Build coverState for the enforcer
+    const lostCoverState = {
+      left:       currentEye === 'left'  ? (coveredInLost ? 'hand' : null) : null,
+      right:      currentEye === 'right' ? (coveredInLost ? 'hand' : null) : null,
+      leftScore:  coveredInLost ? 1 : 0,
+      rightScore: coveredInLost ? 1 : 0,
+    };
+    const lostResult = coverLostEnforcer.update(lostCoverState, currentEye, earL, earR);
+    D('cover-lost-bar').style.width = (lostResult.progress * 100) + '%';
+
+    if (lostResult.ok && !coverExiting) {
+      coverExiting = true;
+      D('cover-lost-status').textContent = '✓ COVERED — resuming…';
+      D('cover-lost-status').style.color = '#00FF88';
+      D('cover-lost-bar').style.background = '#00FF88';
+      setTimeout(exitCoverLost, 400);
+    } else if (lostResult.progress > 0) {
+      D('cover-lost-status').textContent = 'Hold steady…';
+      D('cover-lost-status').style.color = '#FFD700';
+    } else {
+      D('cover-lost-status').textContent = `Cover your ${currentEye.toUpperCase()} eye`;
+      D('cover-lost-status').style.color = '#aaa';
+    }
+    return;
+  }
 
   // ── Phase 1 preview ───────────────────────────────────────────────────────
   if (p1Mode) {
@@ -1620,6 +1873,253 @@ function updateFPS(now) {
   setDv('d-fps', fps);
 }
 
+// ─── Iris Voice Input ────────────────────────────────────────────────────────
+(function () {
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SpeechRecognition) {
+    D('btn-mic').style.display = 'none'; // browser doesn't support it
+    return;
+  }
+
+  const rec = new SpeechRecognition();
+  rec.lang        = 'en-US';
+  rec.continuous  = false;   // one utterance per press
+  rec.interimResults = true;
+
+  let micActive   = false;
+  let irisThinking = false;
+  let transcriptEl, userTextEl, replyWrapEl, replyTextEl, micBtn, micIcon, micLabel;
+
+  function initEls() {
+    transcriptEl = D('iris-transcript');
+    userTextEl   = D('iris-user-text');
+    replyWrapEl  = D('iris-reply-wrap');
+    replyTextEl  = D('iris-reply-text');
+    micBtn       = D('btn-mic');
+    micIcon      = D('mic-icon');
+    micLabel     = D('mic-label');
+  }
+
+  function setMicState(state) {
+    // state: 'idle' | 'listening' | 'thinking'
+    micActive = state === 'listening';
+    micIcon.textContent  = state === 'listening' ? '🔴' : state === 'thinking' ? '⏳' : '🎤';
+    micLabel.textContent = state === 'listening' ? 'Listening…' : state === 'thinking' ? 'Thinking…' : 'Talk to Iris';
+    micBtn.style.borderColor = state === 'listening' ? '#FF4444' : state === 'thinking' ? '#FFD700' : '#333';
+    micBtn.style.color       = state === 'listening' ? '#FF4444' : state === 'thinking' ? '#FFD700' : '#888';
+  }
+
+  function showTranscript(userText, replyText) {
+    transcriptEl.style.display = 'block';
+    userTextEl.textContent     = userText;
+    if (replyText !== undefined) {
+      replyWrapEl.style.display = 'block';
+      replyTextEl.textContent   = replyText;
+    } else {
+      replyWrapEl.style.display = 'none';
+      replyTextEl.textContent   = '';
+    }
+    // Auto-hide after 8s
+    clearTimeout(transcriptEl._hideTimer);
+    if (replyText !== undefined) {
+      transcriptEl._hideTimer = setTimeout(() => {
+        transcriptEl.style.display = 'none';
+      }, 8000);
+    }
+  }
+
+  // Build context object from current test state
+  function buildContext() {
+    const testedEye = currentEye === 'right' ? 'left' : 'right';
+    return {
+      stage:       appState,
+      eye:         currentEye,        // covered eye
+      testedEye,                      // eye being tested
+      distanceCm:  lastDistMm ? lastDistMm / 10 : null,
+      axis:        foundAxis,
+      axisConf:    axisConf,
+      mdsf1:       interleavedSC?.threshold(0) ?? null,
+      mdsf2:       interleavedSC?.threshold(1) ?? null,
+      fp1cm:       fp1ResultMm ? +(fp1ResultMm / 10).toFixed(1) : null,
+      fp2cm:       fp2ResultMm ? +(fp2ResultMm / 10).toFixed(1) : null,
+    };
+  }
+
+  // ── Action executor — Iris controls the test UI ───────────────────────────
+  function executeAction(action) {
+    if (!action) return;
+    switch (action) {
+
+      case 'advance':
+        // Click the primary continue/start button for whatever stage we're on
+        if (appState === 'DISPLAY_CAL')      { D('btn-cal-ok')?.click(); break; }
+        if (appState === 'MONOCULAR_SETUP' ||
+            appState === 'MONOCULAR_OK')     { beginAxisCheckPos(); break; }
+        if (appState === 'AXIS_CHECK_POS')   { D('btn-axpos-cont')?.click(); break; }
+        if (appState === 'AXIS_INTRO')       { D('btn-axis-start')?.click(); break; }
+        if (appState === 'MDSF_INTRO')       { D('btn-mdsf-start')?.click(); break; }
+        if (appState === 'MDSF_DONE' ||
+            appState === 'FAR_POINT_INTRO')  { D('btn-fp-start')?.click(); break; }
+        if (appState === 'RESULTS')          { D('btn-other-eye')?.click(); break; }
+        if (appState === 'COVER_LOST')       { /* wait for cover detection */ break; }
+        break;
+
+      case 'skip':
+        if (appState === 'MONOCULAR_SETUP')  { D('btn-mono-skip')?.click(); break; }
+        if (appState === 'FAR_POINT_1' ||
+            appState === 'FAR_POINT_2')      { D('btn-fp-skip')?.click(); break; }
+        if (appState === 'AXIS_CHECK_POS')   { D('btn-axpos-cont')?.click(); break; }
+        break;
+
+      case 'answer_yes':
+        if (appState === 'MDSF') handleMDSFResponse('yes');
+        break;
+
+      case 'answer_no':
+        if (appState === 'MDSF') handleMDSFResponse('no');
+        break;
+
+      case 'axis_upper':
+      case 'axis_lower':
+      case 'axis_same': {
+        if (appState !== 'AXIS' || axisStep !== 2) break;
+        const key = action === 'axis_upper' ? '1'
+                  : action === 'axis_lower' ? '2' : '3';
+        const rt  = performance.now() - stimStateT;
+        reporter.recordResponseMs(rt);
+        const isSame = key === '3';
+        axisEngine.recordResponse(isSame ? (Math.random() < 0.5 ? 1 : 2) : +key, rt);
+        if (axisEngine.isDone()) {
+          foundAxis = axisEngine.getFinalAxis();
+          axisConf  = axisEngine.getAxisConfidence();
+          renderer.drawFixation();
+          showLabel(`AXIS: ${foundAxis}°`, '#00FF88');
+          showMsg('Axis found! Starting resolution test…', 2000);
+          setProgress(''); setState('AXIS_DONE');
+          setTimeout(() => beginMDSF(), 2200);
+        } else {
+          axisStep = 0;
+        }
+        break;
+      }
+
+      case 'lock_farpoint':
+        if (appState === 'FAR_POINT_1' || appState === 'FAR_POINT_2') {
+          autoCaptureFarPoint(lastDistMm);
+        }
+        break;
+
+      case 'confirm_covered':
+        if (appState === 'MONOCULAR_SETUP' || appState === 'MONOCULAR_OK') {
+          beginAxisCheckPos();
+        }
+        break;
+
+      case 'restart':
+        currentEye = 'right';
+        Object.keys(eyeResultsMap).forEach(k => delete eyeResultsMap[k]);
+        resetEyeState();
+        goToMonocularSetup();
+        break;
+
+      default:
+        console.warn('iris-chat: unknown action', action);
+    }
+  }
+
+  async function askIris(userMessage) {
+    if (irisThinking) return;
+    irisThinking = true;
+    setMicState('thinking');
+    showTranscript(userMessage);
+
+    try {
+      const res  = await fetch('/api/iris-chat', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ message: userMessage, context: buildContext() }),
+      });
+      const data   = await res.json();
+      const reply  = data.reply  || "Sorry, I didn't catch that.";
+      const action = data.action || null;
+
+      showTranscript(userMessage, reply);
+
+      // Auto-start mic when Iris finishes speaking (hands-free loop), unless an
+      // action will change the test stage (stage transitions speak their own intro)
+      const navigatingAction = action && !['answer_yes','answer_no','axis_upper','axis_lower','axis_same'].includes(action);
+      irisSpeak(reply, navigatingAction ? null : () => {
+        if (!irisThinking && !micActive) {
+          try { rec.start(); setMicState('listening'); } catch { /* already active */ }
+        }
+      });
+
+      // Execute UI action after a short delay so speech starts first
+      if (action) setTimeout(() => executeAction(action), 600);
+
+    } catch {
+      showTranscript(userMessage, "Sorry, I couldn't connect right now.");
+    } finally {
+      irisThinking = false;
+      setMicState('idle');
+    }
+  }
+
+  // Interim transcript shown while user speaks
+  rec.onresult = e => {
+    let interim = '', final = '';
+    for (let i = e.resultIndex; i < e.results.length; i++) {
+      const t = e.results[i][0].transcript;
+      if (e.results[i].isFinal) final += t;
+      else interim += t;
+    }
+    showTranscript(final || interim);
+    if (final.trim()) askIris(final.trim());
+  };
+
+  rec.onend = () => {
+    if (!irisThinking) setMicState('idle');
+  };
+
+  rec.onerror = e => {
+    if (e.error !== 'no-speech') console.warn('SpeechRecognition error:', e.error);
+    setMicState('idle');
+  };
+
+  // Mic button: toggle listening
+  document.addEventListener('DOMContentLoaded', initEls);
+  // DOMContentLoaded may already have fired in module context
+  if (document.readyState !== 'loading') initEls();
+
+  D('btn-mic').addEventListener('click', () => {
+    if (irisThinking) return;
+    if (micActive) {
+      rec.stop();
+      setMicState('idle');
+    } else {
+      try {
+        rec.start();
+        setMicState('listening');
+      } catch { /* already started */ }
+    }
+  });
+
+  // Keyboard shortcut: hold Space to talk (only when not typing in an input)
+  document.addEventListener('keydown', e => {
+    if (e.code !== 'Space' || e.target.tagName === 'INPUT') return;
+    if (micActive || irisThinking) return;
+    // Don't interfere with far-point Space key (only active during FAR_POINT states)
+    if (appState === 'FAR_POINT_1' || appState === 'FAR_POINT_2') return;
+    e.preventDefault();
+    try { rec.start(); setMicState('listening'); } catch { /* already started */ }
+  });
+  document.addEventListener('keyup', e => {
+    if (e.code !== 'Space' || e.target.tagName === 'INPUT') return;
+    if (appState === 'FAR_POINT_1' || appState === 'FAR_POINT_2') return;
+    if (micActive) { rec.stop(); }
+  });
+})();
+
 // ─── Boot ─────────────────────────────────────────────────────────────────────
 updateDebugCal();
 if (calibrator.isCalibrated()) {
@@ -1628,7 +2128,7 @@ if (calibrator.isCalibrated()) {
   showOv('ov-display-cal');
   // Greet and explain first step
   irisSpeak(
-    "Welcome to your astigmatism screening. Let's start by calibrating your display. " +
+    "Hello! Welcome to HackAI. Let's start by calibrating your display. " +
     "You'll see a white rectangle on screen. Use the slider below it to resize the rectangle " +
     "until it matches the exact width and height of a standard credit card. " +
     "This step ensures all measurements are accurate. When it matches, click Continue."

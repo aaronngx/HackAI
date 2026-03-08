@@ -21,9 +21,12 @@ export class MonocularEnforcer {
    */
   update(coverState, targetEye, earLeft = 0.3, earRight = 0.3) {
     const covered   = targetEye === 'left' ? coverState.left : coverState.right;
+    const score     = targetEye === 'left' ? (coverState.leftScore  ?? 0)
+                                           : (coverState.rightScore ?? 0);
     const ear       = targetEye === 'left' ? earLeft : earRight;
-    // Covered = hand detected over eye OR EAR very low (eye physically closed/blocked)
-    const confirmed = !!covered || ear < 0.15;
+    // Covered = hand detected over eye (with score > 0 giving partial credit)
+    // OR EAR very low (eye physically closed/blocked)
+    const confirmed = !!covered || score >= 0.15 || ear < 0.15;
 
     if (confirmed) {
       if (!this._coverStart) this._coverStart = performance.now();
