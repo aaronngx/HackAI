@@ -1,9 +1,11 @@
 "use client";
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import Starsfield from "./Starsfield.js";
 import PanelOverlay from "./PanelOverlay.jsx";
 import AppleHelloEffect from "./AppleHelloEffect.js";
+import LoginPanelOverlay from "./LoginPanelOverlay.jsx";
+import SignupPanelOverlay from "./SignupPanelOverlay.jsx";
 
 const logo = "/logo.png";
 const utd = "/utd.png";
@@ -90,13 +92,177 @@ export default function App() {
   const [clicked, setClicked] = useState(false);
   const [activePanelIndex, setActivePanelIndex] = useState(null);
   const [originRect, setOriginRect] = useState(null);
+  const [messageOpen, setMessageOpen] = useState(false);
+  const [loginPanelOpen, setLoginPanelOpen] = useState(false);
+  const [signupPanelOpen, setSignupPanelOpen] = useState(false);
+  const [loginOriginRect, setLoginOriginRect] = useState(null);
+  const [signupOriginRect, setSignupOriginRect] = useState(null);
+  const [user, setUser] = useState(null);
+  const [isUserOpen, setIsUserOpen] = useState(false);
+
+  useEffect(() => {
+    const storedUser = localStorage.getItem("user");
+    if (storedUser) {
+      setUser(JSON.parse(storedUser));
+    }
+  }, []);
 
   const handleHeroClick = () => {
     setClicked(true);
   };
 
+  const handleLogout = () => {
+    localStorage.removeItem("token");
+    localStorage.removeItem("user");
+    setUser(null);
+    setIsUserOpen(false);
+  };
+
+  const initials = user
+    ? `${user.firstName[0]}${user.lastName[0]}`.toUpperCase()
+    : null;
+
   return (
-    <div style={{ background: "#000", overflowX: "hidden" }}>
+    <div style={{ background: "#000", overflowX: "hidden" }}>      {/* Top Navigation Bar */}
+      <div
+        style={{
+          position: "fixed",
+          top: 0,
+          left: 0,
+          right: 0,
+          zIndex: 200,
+          padding: "16px 32px",
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          background: "rgba(0,0,0,0.3)",
+          backdropFilter: "blur(10px)",
+          borderBottom: "1px solid rgba(255,255,255,0.08)",
+        }}
+      >
+        <h1 style={{ margin: 0, fontSize: 20, fontWeight: 700, color: "#fff" }}>🧠 HackAI</h1>
+        {user ? (
+          <div style={{ position: "relative" }}>
+            <motion.button
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              onClick={() => setIsUserOpen(!isUserOpen)}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+                background: "rgba(255,255,255,0.1)",
+                border: "1px solid rgba(255,255,255,0.2)",
+                borderRadius: 10,
+                padding: "8px 12px",
+                color: "#fff",
+                cursor: "pointer",
+              }}
+            >
+              <div
+                style={{
+                  width: 32,
+                  height: 32,
+                  borderRadius: "50%",
+                  background: "rgba(255,255,255,0.2)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  fontSize: 12,
+                  fontWeight: 700,
+                }}
+              >
+                {initials}
+              </div>
+              <span style={{ fontSize: 13, fontWeight: 600 }}>{user.firstName}</span>
+            </motion.button>
+            {isUserOpen && (
+              <div
+                style={{
+                  position: "absolute",
+                  top: "100%",
+                  right: 0,
+                  marginTop: 8,
+                  background: "rgba(15,15,15,0.95)",
+                  border: "1px solid rgba(255,255,255,0.1)",
+                  borderRadius: 12,
+                  overflow: "hidden",
+                  minWidth: 200,
+                }}
+              >
+                <div style={{ padding: "12px 16px", borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
+                  <p style={{ margin: 0, color: "#fff", fontSize: 13, fontWeight: 600 }}>
+                    {user.firstName} {user.lastName}
+                  </p>
+                  <p style={{ margin: 0, color: "#888", fontSize: 12, marginTop: 4 }}>{user.email}</p>
+                </div>
+                <motion.button
+                  whileHover={{ background: "rgba(255,255,255,0.05)" }}
+                  onClick={handleLogout}
+                  style={{
+                    width: "100%",
+                    padding: "12px 16px",
+                    background: "none",
+                    border: "none",
+                    color: "#ff6b6b",
+                    fontSize: 13,
+                    fontWeight: 600,
+                    cursor: "pointer",
+                    textAlign: "left",
+                  }}
+                >
+                  🚪 Logout
+                </motion.button>
+              </div>
+            )}
+          </div>
+        ) : (
+          <div style={{ display: "flex", gap: 12 }}>
+            <motion.button
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              onClick={(e) => {
+                setSignupPanelOpen(false);
+                setLoginOriginRect(e.currentTarget.getBoundingClientRect());
+                setLoginPanelOpen(true);
+              }}
+              style={{
+                padding: "8px 18px",
+                background: "rgba(255,255,255,0.1)",
+                border: "1px solid rgba(255,255,255,0.2)",
+                borderRadius: 8,
+                color: "#fff",
+                fontSize: 13,
+                fontWeight: 600,
+                cursor: "pointer",
+              }}
+            >
+              Login
+            </motion.button>
+            <motion.button
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              onClick={(e) => {
+                setLoginPanelOpen(false);
+                setSignupOriginRect(e.currentTarget.getBoundingClientRect());
+                setSignupPanelOpen(true);
+              }}
+              style={{
+                padding: "8px 18px",
+                background: "#fff",
+                border: "none",
+                borderRadius: 8,
+                color: "#000",
+                fontSize: 13,
+                fontWeight: 700,
+                cursor: "pointer",
+              }}
+            >
+              Sign Up
+            </motion.button>
+          </div>
+        )}
+      </div>
       <AnimatePresence>
         {!clicked && (
           <motion.div
@@ -307,6 +473,35 @@ export default function App() {
       >
         HACKAI © 2026
       </div>
+
+      {/* Auth Panels */}
+      <AnimatePresence>
+        {loginPanelOpen && (
+          <LoginPanelOverlay
+            originRect={loginOriginRect}
+            onClose={() => setLoginPanelOpen(false)}
+            onSwitchToSignup={() => {
+              setLoginPanelOpen(false);
+              setSignupOriginRect(loginOriginRect || { top: "50%", left: "50%", width: 0, height: 0 });
+              setSignupPanelOpen(true);
+            }}
+          />
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {signupPanelOpen && (
+          <SignupPanelOverlay
+            originRect={signupOriginRect}
+            onClose={() => setSignupPanelOpen(false)}
+            onSwitchToLogin={() => {
+              setSignupPanelOpen(false);
+              setLoginOriginRect(signupOriginRect || { top: "50%", left: "50%", width: 0, height: 0 });
+              setLoginPanelOpen(true);
+            }}
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
 }
