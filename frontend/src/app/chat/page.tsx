@@ -12,9 +12,50 @@ interface Message {
   text: string;
 }
 
+interface LatestDiagnostic {
+  id: string;
+  userId: string;
+  likely_disease: string;
+  confidence: string;
+  visible_findings: string[];
+  short_report?: string | null;
+  medical_disclaimer?: string | null;
+  createdAt: string;
+}
+
+interface LatestExam {
+  _id: string;
+  userId: string;
+  testedEye: "left" | "right";
+  coveredEye: "left" | "right";
+  protocol: string;
+  axis?: number | null;
+  axisConf?: number | null;
+  mdsf1?: number | null;
+  mdsf2?: number | null;
+  sn1?: number | null;
+  sn2?: number | null;
+  fp1Mm?: number | null;
+  fp2Mm?: number | null;
+  refraction?: {
+    sph: number;
+    cyl: number;
+    axis: number;
+    note?: string | null;
+    colorNote?: string | null;
+  } | null;
+  quality?: number | null;
+  createdAt: string;
+}
+
+interface ChatPersonalization {
+  latestDiagnostic: LatestDiagnostic | null;
+  latestExam: LatestExam | null;
+}
+
 // ── Gemini API call ───────────────────────────────────────────────────────────
 
-const SYSTEM_PROMPT = `You are Iris, a friendly and knowledgeable AI eye health assistant built by HackAI. 
+const BASE_SYSTEM_PROMPT = `You are Iris, a friendly and knowledgeable AI eye health assistant built by HackAI. 
 You help users understand eye conditions, explain what their screening results mean in simple terms, 
 answer general questions about eye health, and guide them toward professional care when appropriate.
 
@@ -25,15 +66,101 @@ Rules:
 - Keep answers concise (2–4 sentences for simple questions, a bit more for complex ones).
 - If someone asks about their IRIS report, help them interpret it without being alarmist.`;
 
+function buildSystemPrompt(personalization: ChatPersonalization | null): string {
+  if (!personalization?.latestDiagnostic && !personalization?.latestExam) {
+    return BASE_SYSTEM_PROMPT;
+  }
+
+  return `${BASE_SYSTEM_PROMPT}
+
+Personalization context for the currently logged-in user:
+- Use the saved records below only to personalize explanations about this user's own screening history.
+- Do not claim certainty or make a diagnosis.
+- If the user asks a general eye-health question, answer normally and only use the saved data when it is directly helpful.
+
+Latest eye_diagnostic schema:
+{
+  "userId": "string",
+  "likely_disease": "string",
+  "confidence": "string",
+  "visible_findings": ["string"],
+  "short_report": "string | null",
+  "medical_disclaimer": "string | null",
+  "model": "string | null",
+  "source_file_name": "string | null",
+  "source_mime_type": "string | null",
+  "createdAt": "date"
+}
+
+Latest eye_exam_results schema:
+{
+  "userId": "string",
+  "testedEye": "left | right",
+  "coveredEye": "left | right",
+  "protocol": "string",
+  "axis": "number | null",
+  "axisConf": "number | null",
+  "mdsf1": "number | null",
+  "mdsf2": "number | null",
+  "sn1": "number | null",
+  "sn2": "number | null",
+  "fp1Mm": "number | null",
+  "fp2Mm": "number | null",
+  "refraction": {
+    "sph": "number",
+    "cyl": "number",
+    "axis": "number",
+    "note": "string | null",
+    "colorNote": "string | null"
+  } | null,
+  "quality": "number | null",
+  "createdAt": "date"
+}
+
+Latest saved eye_diagnostic entry:
+${JSON.stringify(personalization.latestDiagnostic, null, 2)}
+
+Latest saved eye_exam_results entry:
+${JSON.stringify(personalization.latestExam, null, 2)}`;
+}
+
+async function fetchLatestDiagnostic(token: string): Promise<LatestDiagnostic | null> {
+  const res = await fetch(`/api/eye-diagnostic/history?t=${Date.now()}`, {
+    method: "GET",
+    headers: { Authorization: `Bearer ${token}` },
+    cache: "no-store",
+  });
+
+  if (!res.ok) return null;
+  const data = await res.json();
+  return Array.isArray(data.history) && data.history.length > 0
+    ? (data.history[0] as LatestDiagnostic)
+    : null;
+}
+
+async function fetchLatestExam(token: string): Promise<LatestExam | null> {
+  const res = await fetch(
+    `/api/get-exams?token=${encodeURIComponent(token)}&limit=1`,
+    { method: "GET", cache: "no-store" }
+  );
+
+  if (!res.ok) return null;
+  const data = await res.json();
+  return Array.isArray(data.exams) && data.exams.length > 0
+    ? (data.exams[0] as LatestExam)
+    : null;
+}
+
 async function sendMessage(
   history: { role: Role; parts: { text: string }[] }[],
-  userText: string
+  userText: string,
+  personalization: ChatPersonalization | null
 ): Promise<string> {
   const res = await fetch("/api/gemini", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      systemPrompt: SYSTEM_PROMPT,
+      systemPrompt: buildSystemPrompt(personalization),
       history,
       parts: [{ text: userText }],
     }),
@@ -76,9 +203,41 @@ export default function ChatPage() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
+  const [personalization, setPersonalization] = useState<ChatPersonalization | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const router = useRouter();
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadPersonalization = async () => {
+      const token = sessionStorage.getItem("token");
+      if (!token) {
+        setPersonalization(null);
+        return;
+      }
+
+      try {
+        const [latestDiagnostic, latestExam] = await Promise.all([
+          fetchLatestDiagnostic(token),
+          fetchLatestExam(token),
+        ]);
+
+        if (cancelled) return;
+        setPersonalization({ latestDiagnostic, latestExam });
+      } catch {
+        if (cancelled) return;
+        setPersonalization(null);
+      }
+    };
+
+    loadPersonalization();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // Scroll to bottom whenever messages change
   useEffect(() => {
@@ -95,7 +254,7 @@ export default function ChatPage() {
     setMessages(prev => [...prev, { role: "user", text: trimmed }]);
     setLoading(true);
     try {
-      const reply = await sendMessage(historyForApi(), trimmed);
+      const reply = await sendMessage(historyForApi(), trimmed, personalization);
       setMessages(prev => [...prev, { role: "model", text: reply }]);
     } catch {
       setMessages(prev => [...prev, { role: "model", text: "Something went wrong. Please check your connection and try again." }]);
