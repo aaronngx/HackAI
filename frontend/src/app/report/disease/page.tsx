@@ -201,6 +201,18 @@ function useElevenLabsNarration() {
     }, 300);
   };
 
+  // Stop audio when the component unmounts (page navigation)
+  useEffect(() => {
+    return () => {
+      stoppedRef.current = true;
+      if (audioRef.current) {
+        audioRef.current.pause();
+        URL.revokeObjectURL(audioRef.current.src);
+        audioRef.current = null;
+      }
+    };
+  }, []);
+
   return { lineIdx, playing, loading, start, stop, replay };
 }
 

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useRef } from "react";
+import { useRouter } from "next/navigation";
 import Starsfield from "@/components/Starsfield.js";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -53,6 +54,82 @@ const MOCK_REPORT: ExamReport = {
   urgency: "moderate",
   urgencyReason: "Acuity differences between eyes noted — consider booking a professional eye exam to confirm these estimates.",
 };
+
+// ── Eye care plan builder ─────────────────────────────────────────────────────
+
+interface EyeCarePlan {
+  exercises: { title: string; description: string; duration: string }[];
+  lubrication: { tip: string; reason: string }[];
+  correctionCare: { tip: string }[];
+  followUpDays: number;       // recommended follow-up in days
+}
+
+function buildEyeCarePlan(input: ExamInput, report: ExamReport): EyeCarePlan {
+  const hasMyopia = report.diagnoses.some(d => d.condition.toLowerCase().includes("myopia"));
+  const hasAstigmatism = report.diagnoses.some(d => d.condition.toLowerCase().includes("astigmatism"));
+  const hasHyperopia = report.diagnoses.some(d => d.condition.toLowerCase().includes("hyperopia"));
+  const wears = input.wearsCorrection;
+
+  const exercises = [
+    {
+      title: "20-20-20 Rule",
+      description: "Every 20 minutes of screen time, look at something 20 feet away for 20 seconds. This relaxes the focusing muscles inside your eyes.",
+      duration: "20 sec every 20 min",
+    },
+    {
+      title: "Near-Far Focusing",
+      description: "Hold a finger close to your nose, focus on it for 5 seconds, then shift focus to something far away for 5 seconds. Repeat 10 times to exercise your eye's zoom muscles.",
+      duration: "2 min · 2× daily",
+    },
+    ...(hasMyopia || hasAstigmatism ? [{
+      title: "Figure-8 Tracing",
+      description: "Imagine a giant figure-8 about 10 feet in front of you. Slowly trace it with your eyes without moving your head. This strengthens the muscles that control eye movement.",
+      duration: "2 min · once daily",
+    }] : []),
+    ...(hasHyperopia ? [{
+      title: "Close Focus Exercise",
+      description: "Hold a printed page at arm's length and slowly bring it toward your face, keeping the text as sharp as possible. Stop when it blurs, then move it back out. This trains your near-focus system.",
+      duration: "1 min · 3× daily",
+    }] : []),
+    {
+      title: "Palming",
+      description: "Rub your palms together to warm them, then gently cup them over your closed eyes — no pressure on the eyeballs. Rest and breathe deeply. This relieves eye tension and digital strain.",
+      duration: "3 min · anytime",
+    },
+  ];
+
+  const lubrication: { tip: string; reason: string }[] = wears === "contacts" ? [
+    { tip: "Use preservative-free rewetting drops designed for contact lenses", reason: "Regular drops can coat your lenses and cause blurry vision or irritation." },
+    { tip: "Follow the 20-20-20 rule strictly — contacts reduce tear flow", reason: "Contact lenses absorb tear film, making dry-eye symptoms worse during screen use." },
+    { tip: "Remove contacts at least 1–2 hours before bed", reason: "Night-time eye rest without lenses allows the ocular surface to recover." },
+    { tip: "Never sleep in daily or monthly lenses unless specifically extended-wear approved", reason: "Overnight wear significantly increases infection risk." },
+  ] : wears === "glasses" ? [
+    { tip: "Use lubricating eye drops (artificial tears) if your eyes feel dry or gritty", reason: "Glasses do not affect tear film, but air conditioning and screen use still dry your eyes out." },
+    { tip: "Consider a humidifier in your workspace", reason: "Low humidity is the #1 environmental cause of dry eye in office settings." },
+    { tip: "Blink fully and consciously — we blink 60% less when reading screens", reason: "Incomplete blinks don't spread tears properly across the eye surface." },
+  ] : [
+    { tip: "Use preservative-free artificial tears 1–2× a day as a baseline", reason: "Even without correction, screen use and air exposure gradually reduce natural tear moisture." },
+    { tip: "Warm compresses on closed eyes for 5 minutes each morning", reason: "Heat unclogs meibomian glands, which produce the oily layer that keeps tears from evaporating." },
+    { tip: "Stay hydrated — aim for 8 cups of water daily", reason: "Tear production drops significantly when you're even mildly dehydrated." },
+  ];
+
+  const correctionCare: { tip: string }[] = wears === "glasses" ? [
+    { tip: "Clean lenses with a microfibre cloth and lens-safe solution daily — never use paper towels or clothing." },
+    { tip: "Store glasses in a hard case when not in use to prevent frame warping and lens scratches." },
+    { tip: "Get your frames adjusted every 6–12 months — a misaligned frame forces your eyes to compensate." },
+    { tip: "Anti-reflective coating reduces glare from screens and headlights — worth considering at your next lens update." },
+  ] : wears === "contacts" ? [
+    { tip: "Replace your lens case every 3 months and use fresh solution — never top off old solution." },
+    { tip: "Always wash and dry your hands before handling lenses." },
+    { tip: "Keep a spare pair of glasses in case of eye irritation or infection — never push through discomfort with contacts in." },
+    { tip: "Avoid wearing contacts in swimming pools, hot tubs, or showers — waterborne bacteria can cause serious infections." },
+  ] : [];
+
+  const followUpDays = report.urgency === "high" || report.urgency === "critical" ? 30
+    : report.urgency === "moderate" ? 90 : 180;
+
+  return { exercises, lubrication, correctionCare, followUpDays };
+}
 
 // ── Colours ───────────────────────────────────────────────────────────────────
 
@@ -233,6 +310,18 @@ function useElevenLabsNarration() {
     }, 300);
   };
 
+  // Stop audio when the component unmounts (page navigation)
+  useEffect(() => {
+    return () => {
+      stoppedRef.current = true;
+      if (audioRef.current) {
+        audioRef.current.pause();
+        URL.revokeObjectURL(audioRef.current.src);
+        audioRef.current = null;
+      }
+    };
+  }, []);
+
   return { lineIdx, playing, loading, start, stop, replay };
 }
 
@@ -308,11 +397,13 @@ function NarrationBar({ lines, lineIdx, playing, loading, onStop }: {
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
 export default function ReportPage() {
+  const router = useRouter();
   const [input, setInput] = useState<ExamInput | null>(null);
   const [report, setReport] = useState<ExamReport | null>(null);
   const [pageLoading, setPageLoading] = useState(true);
   const [narrationLines, setNarrationLines] = useState<string[]>([]);
   const [showNarrationPrompt, setShowNarrationPrompt] = useState(false);
+  const [daysSinceLastScan, setDaysSinceLastScan] = useState<number | null>(null);
   const { lineIdx, playing, loading: ttsLoading, start, stop, replay } = useElevenLabsNarration();
   const hasStarted = useRef(false);
 
@@ -324,6 +415,13 @@ export default function ReportPage() {
     } catch {
       setInput(MOCK_INPUT);
     }
+    // Track days since last scan
+    const lastScan = localStorage.getItem("irisLastScanDate");
+    if (lastScan) {
+      const diff = Math.floor((Date.now() - parseInt(lastScan)) / (1000 * 60 * 60 * 24));
+      setDaysSinceLastScan(diff);
+    }
+    localStorage.setItem("irisLastScanDate", Date.now().toString());
   }, []);
 
   // 2. Generate report via Gemini
@@ -335,6 +433,8 @@ export default function ReportPage() {
       setNarrationLines(buildNarrationScript(r, input));
       setPageLoading(false);
       setShowNarrationPrompt(true);
+      // Persist for care plan page
+      try { localStorage.setItem("irisExamReport", JSON.stringify(r)); } catch {}
     });
   }, [input]);
 
@@ -679,7 +779,7 @@ export default function ReportPage() {
               <button className="report-footer-btn-primary" style={{ background: `linear-gradient(135deg, ${C.brand}, #007a87)` }}>
                 Find Eye Doctor
               </button>
-              <button className="report-footer-btn-secondary">
+              <button className="report-footer-btn-secondary" onClick={() => router.push("/care-plan")}>
                 View Care Plan
               </button>
             </div>
