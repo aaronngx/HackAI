@@ -52,7 +52,7 @@ function StarRating({ rating, count, size = 14, color = "#111" }) {
   const r = Number(rating).toFixed(1);
   return (
     <span style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: size, color, fontWeight: 600 }}>
-      <span style={{ color: "#f59e0b" }}>★</span> {r}
+      <svg width={size} height={size} viewBox="0 0 24 24" fill="#f59e0b" stroke="none"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg> {r}
       {count != null && count > 0 && (
         <span style={{ fontWeight: 500, opacity: 0.85, fontSize: size - 2 }}>({count} reviews)</span>
       )}
@@ -134,12 +134,12 @@ function DoctorDetailCard({ doctor, onClose, onShowMap }) {
                 style={{
                   position: "absolute", top: 12, left: 12,
                   background: "rgba(0,0,0,0.5)", border: "none", borderRadius: "50%",
-                  width: 36, height: 36, color: "#fff", fontSize: 18,
+                  width: 36, height: 36, color: "#fff",
                   cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
                   backdropFilter: "blur(4px)",
                 }}
               >
-                ←
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
               </motion.button>
               <div style={{ position: "absolute", bottom: 14, left: 16, right: 16 }}>
                 <div style={{ color: "#fff", fontWeight: 700, fontSize: 20 }}>{doctor.name}</div>
@@ -228,13 +228,13 @@ function DoctorDetailCard({ doctor, onClose, onShowMap }) {
                   </div>
 
                   {[
-                    { icon: "📍", label: "Address", value: doctor.address },
-                    { icon: "🕐", label: "Hours", value: hours },
-                    { icon: "💳", label: "Insurance", value: insurance },
-                    { icon: "🗣", label: "Languages", value: languages },
+                    { icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#555" strokeWidth="1.8"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>, label: "Address", value: doctor.address },
+                    { icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#555" strokeWidth="1.8"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>, label: "Hours", value: hours },
+                    { icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#555" strokeWidth="1.8"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>, label: "Insurance", value: insurance },
+                    { icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#555" strokeWidth="1.8"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>, label: "Languages", value: languages },
                   ].map(({ icon, label, value }) => (
                     <div key={label} style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
-                      <div style={{ fontSize: 18, flexShrink: 0, marginTop: 1 }}>{icon}</div>
+                      <div style={{ flexShrink: 0, marginTop: 6 }}>{icon}</div>
                       <div>
                         <div style={{ fontSize: 11, color: "#999", fontWeight: 600, marginBottom: 2 }}>{label}</div>
                         <div style={{ fontSize: 13, color: "#222" }}>{value}</div>
@@ -595,7 +595,8 @@ export default function DoctorModal({ onClose }) {
                 onClick={handleGeolocate}
                 style={{ width: "100%", padding: "9px 0", background: "#111", color: "#fff", border: "none", borderRadius: 10, fontSize: 13, fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}
               >
-                <span>📍</span> Use My Location
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+                Use My Location
               </motion.button>
               <form onSubmit={handleZipSearch} style={{ display: "flex", gap: 6 }}>
                 <input
@@ -624,8 +625,17 @@ export default function DoctorModal({ onClose }) {
               </form>
               {(loading || locStatus) && (
                 <div style={{ fontSize: 11, color: locStatus.includes("denied") || locStatus.includes("not found") || locStatus.includes("Could not") ? "#e55" : "#555", paddingLeft: 2 }}>
-                  {loading || locStatus.includes("Detecting") || locStatus.includes("Searching") ? "⏳ " : userLocation ? "✓ " : "⚠ "}
-                  {loading ? "Loading doctors…" : locStatus}
+                  <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
+                    {loading || locStatus.includes("Detecting") || locStatus.includes("Searching") ? (
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ animation: "spin 1s linear infinite" }}><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
+                    ) : userLocation ? (
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#2d7a4f" strokeWidth="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+                    ) : (
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                    )}
+                    {loading ? "Loading doctors…" : locStatus}
+                  </span>
+                  <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
                 </div>
               )}
             </div>

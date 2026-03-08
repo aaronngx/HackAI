@@ -50,7 +50,7 @@ const SUGGESTIONS = [
   "How is astigmatism different from nearsightedness?",
   "What should I do if I notice blurry vision?",
   "Can screen time damage my eyes?",
-  "How often should I get an eye exam?",
+  "How often should I get an eye screening?",
 ];
 
 // ── Typing indicator ──────────────────────────────────────────────────────────
@@ -124,37 +124,46 @@ export default function ChatPage() {
         .msg-in { animation: fadeUp 0.3s ease both; }
         textarea:focus { outline: none; }
         textarea { resize: none; }
-        .suggestion-btn:hover { background: #e2eaf6 !important; }
+        .suggestion-btn:hover { background: #dce8f8 !important; border-color: #b8cde8 !important; }
       `}</style>
 
       <div style={{ display: "flex", flexDirection: "column", height: "100dvh", background: "#f0f5fb" }}>
 
         {/* ── Header ── */}
-        <div style={{ background: "#0d1526", borderBottom: "1px solid #1e2d45", padding: "16px 28px", display: "flex", alignItems: "center", gap: 14, flexShrink: 0 }}>
+        <div style={{ background: "#0d1526", borderBottom: "1px solid #1e2d45", padding: "20px 32px", flexShrink: 0, position: "relative", overflow: "hidden" }}>
+          <div style={{ position: "absolute", right: 32, top: -8, fontFamily: "'Bebas Neue'", fontSize: 160, color: "rgba(255,255,255,0.03)", lineHeight: 1, userSelect: "none" }}>IRIS</div>
           <button
-            onClick={() => router.back()}
-            style={{ background: "none", border: "none", cursor: "pointer", color: "rgba(255,255,255,0.5)", display: "flex", alignItems: "center", gap: 6, fontSize: 13, fontFamily: "'DM Mono', monospace", padding: 0 }}
+            onClick={() => { sessionStorage.setItem("irisIntroSeen", "1"); router.back(); }}
+            style={{
+              display: "inline-flex", alignItems: "center", gap: 8,
+              marginBottom: 14,
+              background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.14)",
+              borderRadius: 10, color: "rgba(255,255,255,0.7)",
+              fontFamily: "'DM Mono', monospace", fontSize: 11, letterSpacing: 1,
+              padding: "6px 14px", cursor: "pointer",
+            }}
           >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M19 12H5M12 19l-7-7 7-7"/>
             </svg>
-            Back
+            HOME
           </button>
-          <div style={{ width: 1, height: 20, background: "rgba(255,255,255,0.12)" }} />
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <div style={{ width: 34, height: 34, borderRadius: "50%", background: "rgba(0,196,212,0.15)", border: "1px solid rgba(0,196,212,0.3)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#00c4d4" strokeWidth="1.5">
-                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>
-              </svg>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+              <div style={{ width: 40, height: 40, borderRadius: "50%", background: "rgba(0,196,212,0.15)", border: "1px solid rgba(0,196,212,0.3)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#00c4d4" strokeWidth="1.5">
+                  <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>
+                </svg>
+              </div>
+              <div>
+                <div style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 22, letterSpacing: 4, color: "#ffffff" }}>IRIS AI</div>
+                <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, color: "rgba(255,255,255,0.4)", letterSpacing: 2 }}>EYE HEALTH ASSISTANT</div>
+              </div>
             </div>
-            <div>
-              <div style={{ fontFamily: "'Bebas Neue'", fontSize: 17, letterSpacing: 3, color: "#ffffff" }}>IRIS AI</div>
-              <div style={{ fontFamily: "'DM Mono'", fontSize: 9, color: "rgba(255,255,255,0.4)", letterSpacing: 1 }}>EYE HEALTH ASSISTANT</div>
+            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <div style={{ width: 7, height: 7, borderRadius: "50%", background: "#22d46a", boxShadow: "0 0 6px #22d46a88" }} />
+              <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: "rgba(255,255,255,0.4)", letterSpacing: 1 }}>ONLINE</span>
             </div>
-          </div>
-          <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 6 }}>
-            <div style={{ width: 7, height: 7, borderRadius: "50%", background: "#22d46a" }} />
-            <span style={{ fontFamily: "'DM Mono'", fontSize: 10, color: "rgba(255,255,255,0.45)" }}>Online</span>
           </div>
         </div>
 
@@ -174,8 +183,8 @@ export default function ChatPage() {
                   <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>
                 </svg>
               </div>
-              <div style={{ fontFamily: "'Instrument Serif'", fontSize: 26, color: "#0d1b2e", marginBottom: 8 }}>Hi, I'm Iris</div>
-              <p style={{ fontFamily: "'DM Sans'", fontSize: 14, color: "#6b84a0", maxWidth: 380, margin: "0 auto 32px", lineHeight: 1.6 }}>
+              <div style={{ fontFamily: "'Instrument Serif', serif", fontSize: 28, color: "#0d1b2e", marginBottom: 8 }}>Hi, I'm Iris</div>
+              <p style={{ fontFamily: "'DM Sans', sans-serif", fontSize: 14, color: "#4a6280", maxWidth: 380, margin: "0 auto 32px", lineHeight: 1.65 }}>
                 Ask me anything about your eye health, how to read your report, or what common eye conditions mean.
               </p>
               <div style={{ display: "flex", flexWrap: "wrap", gap: 8, justifyContent: "center" }}>
@@ -184,7 +193,7 @@ export default function ChatPage() {
                     key={s}
                     className="suggestion-btn"
                     onClick={() => submit(s)}
-                    style={{ background: "#edf2fb", border: "1px solid #ccd8ee", borderRadius: 20, padding: "9px 16px", fontSize: 12, color: "#2c4a6e", cursor: "pointer", fontFamily: "'DM Sans'", transition: "background 0.15s" }}
+                    style={{ background: "#f0f5fb", border: "1px solid #ccd8ee", borderRadius: 20, padding: "9px 16px", fontSize: 12, color: "#4a6280", cursor: "pointer", fontFamily: "'DM Sans', sans-serif", transition: "background 0.15s, border-color 0.15s" }}
                   >
                     {s}
                   </button>
@@ -254,9 +263,9 @@ export default function ChatPage() {
         </div>
 
         {/* ── Input bar ── */}
-        <div style={{ flexShrink: 0, background: "#ffffff", borderTop: "1px solid #e0e8f4", padding: "14px 20px 20px" }}>
+        <div style={{ flexShrink: 0, background: "#fff", borderTop: "1px solid #ccd8ee", padding: "14px 20px 18px" }}>
           <div style={{ maxWidth: 760, margin: "0 auto", display: "flex", gap: 10, alignItems: "flex-end" }}>
-            <div style={{ flex: 1, background: "#f4f7fd", border: "1px solid #ccd8ee", borderRadius: 16, padding: "10px 16px", display: "flex", alignItems: "flex-end", gap: 8 }}>
+            <div style={{ flex: 1, background: "#f0f5fb", border: "1px solid #ccd8ee", borderRadius: 14, padding: "10px 16px", display: "flex", alignItems: "flex-end", gap: 8 }}>
               <textarea
                 ref={inputRef}
                 rows={1}
@@ -268,7 +277,7 @@ export default function ChatPage() {
                 }}
                 onKeyDown={handleKey}
                 placeholder="Ask Iris about your eye health…"
-                style={{ flex: 1, background: "none", border: "none", color: "#0d1b2e", fontSize: 14, fontFamily: "'DM Sans'", lineHeight: 1.5, maxHeight: 120, overflowY: "auto" }}
+                style={{ flex: 1, background: "none", border: "none", color: "#0d1b2e", fontSize: 14, fontFamily: "'DM Sans', sans-serif", lineHeight: 1.5, maxHeight: 120, overflowY: "auto" }}
               />
             </div>
             <motion.button
@@ -286,7 +295,7 @@ export default function ChatPage() {
               </svg>
             </motion.button>
           </div>
-          <p style={{ textAlign: "center", fontFamily: "'DM Mono'", fontSize: 9, color: "#b0c0d8", marginTop: 10, letterSpacing: 0.5 }}>
+          <p style={{ textAlign: "center", fontFamily: "'DM Mono', monospace", fontSize: 9, color: "#8098b8", marginTop: 10, letterSpacing: 1 }}>
             Iris provides general information only — not medical advice. Always consult a professional.
           </p>
         </div>

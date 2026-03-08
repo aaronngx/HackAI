@@ -1208,6 +1208,11 @@ function showResults() {
   eyeResultsMap[testedEye] = eyeData;
   session.eyes[testedEye]  = eyeData;
 
+  // Persist latest exam snapshot for the screening report page
+  try {
+    localStorage.setItem('irisExamResults', JSON.stringify(session.eyes));
+  } catch(_) {}
+
   // Save to database with user feedback
   D('save-status').textContent = '⏳ Saving…';
   D('save-status').style.color = '#888';
@@ -2029,8 +2034,10 @@ function updateFPS(now) {
       // Auto-start mic when Iris finishes speaking (hands-free loop), unless an
       // action will change the test stage (stage transitions speak their own intro)
       const navigatingAction = action && !['answer_yes','answer_no','axis_upper','axis_lower','axis_same'].includes(action);
+      const activeTestStates = ['AXIS','MDSF','FAR_POINT_1','FAR_POINT_2'];
       irisSpeak(reply, navigatingAction ? null : () => {
-        if (!irisThinking && !micActive) {
+        // Don't auto-restart mic during active test phases — Iris's TTS would be captured by the mic
+        if (!irisThinking && !micActive && !activeTestStates.includes(appState)) {
           try { rec.start(); setMicState('listening'); } catch { /* already active */ }
         }
       });
@@ -2073,7 +2080,7 @@ function updateFPS(now) {
   if (document.readyState !== 'loading') initEls();
 
   D('btn-mic').addEventListener('click', () => {
-    if (irisThinking) return;
+    if (irisThinking) { irisThinking = false; setMicState('idle'); } // unstick if jammed
     if (micActive) {
       rec.stop();
       setMicState('idle');
