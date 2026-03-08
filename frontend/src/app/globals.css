@@ -10,5 +10,11 @@ body {
   background: #000;
   color: #fff;
   font-family: Arial, Helvetica, sans-serif;
+  scrollbar-gutter: stable;
+}
+
+/* Contain horizontal overflow on the app shell, not on body, so position:fixed works correctly in all browsers */
+#__next,
+main {
   overflow-x: hidden;
 }
