@@ -7,7 +7,7 @@ const panels = [
   { title: "Eye Disease Detect" },
   { title: "Eyes Exam" },
   { title: "Report" },
-  { title: "Doctor Find" },
+  { title: "Find Clinic" },
 ];
 
 function PlaceholderContent({ title, desc, icon }) {
@@ -95,7 +95,7 @@ export default function PanelOverlay({ panelIndex, originRect, onClose }) {
                 onClick={() => setDoctorOpen(true)}
                 style={{ padding: "14px 36px", background: "#fff", color: "#000", border: "none", borderRadius: 14, fontSize: 15, fontWeight: 700, cursor: "pointer" }}
               >
-                Open Doctor Finder
+                Open Clinic Finder
               </motion.button>
             </div>
           ) : panelContent[panelIndex]}
