@@ -1208,6 +1208,11 @@ function showResults() {
   eyeResultsMap[testedEye] = eyeData;
   session.eyes[testedEye]  = eyeData;
 
+  // Persist latest exam snapshot for the screening report page
+  try {
+    localStorage.setItem('irisExamResults', JSON.stringify(session.eyes));
+  } catch(_) {}
+
   // Save to database with user feedback
   D('save-status').textContent = '⏳ Saving…';
   D('save-status').style.color = '#888';

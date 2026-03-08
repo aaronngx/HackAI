@@ -390,6 +390,15 @@ export default function DiseaseReportPage() {
 
   const handleBack = () => {
     stop();
+    sessionStorage.setItem("irisIntroSeen", "1");
+    setPageExiting(true);
+    setTimeout(() => router.push("/"), 380);
+  };
+
+  const handleFindDoctor = () => {
+    stop();
+    sessionStorage.setItem("irisIntroSeen", "1");
+    sessionStorage.setItem("irisOpenDoctor", "1");
     setPageExiting(true);
     setTimeout(() => router.push("/"), 380);
   };
@@ -594,40 +603,20 @@ export default function DiseaseReportPage() {
           <button
             onClick={handleBack}
             style={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: 8,
-              marginBottom: 14,
-              background: "rgba(255,255,255,0.1)",
-              border: "1px solid rgba(255,255,255,0.2)",
-              borderRadius: 10,
-              color: "#fff",
-              fontFamily: "'DM Mono', monospace",
-              fontSize: 12,
-              padding: "8px 12px",
-              cursor: "pointer",
-              position: "relative",
-              zIndex: 1,
+              display: "inline-flex", alignItems: "center", gap: 8, marginBottom: 14,
+              background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.14)",
+              borderRadius: 10, cursor: "pointer", position: "relative", zIndex: 1,
+              color: "rgba(255,255,255,0.75)", fontFamily: "'DM Mono', monospace",
+              fontSize: 11, letterSpacing: 1, padding: "7px 14px",
             }}
           >
-            ← Back
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M19 12H5M12 19l-7-7 7-7"/>
+            </svg>
+            HOME
           </button>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 16 }}>
             <div>
-              <button onClick={handleBack} style={{
-                display: "inline-flex", alignItems: "center", gap: 6,
-                background: "none", border: "none", cursor: "pointer",
-                color: "rgba(255,255,255,0.45)", fontFamily: "'DM Mono'", fontSize: 11, letterSpacing: 1,
-                padding: "0 0 12px 0", transition: "color 0.18s",
-              }}
-                onMouseEnter={e => (e.currentTarget.style.color = "rgba(255,255,255,0.85)")}
-                onMouseLeave={e => (e.currentTarget.style.color = "rgba(255,255,255,0.45)")}
-              >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <polyline points="15 18 9 12 15 6"/>
-                </svg>
-                HOME
-              </button>
               <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={C.brand} strokeWidth="1.5">
                   <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" />
@@ -788,7 +777,7 @@ export default function DiseaseReportPage() {
                 </p>
               </div>
               <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
-                <button style={{ padding: "13px 26px", borderRadius: 12, border: "none", cursor: "pointer", background: `linear-gradient(135deg, ${C.brand}, #007a87)`, color: "#fff", fontFamily: "'Bebas Neue'", fontSize: 17, letterSpacing: 2, whiteSpace: "nowrap" }}>
+                <button onClick={handleFindDoctor} style={{ padding: "13px 26px", borderRadius: 12, border: "none", cursor: "pointer", background: `linear-gradient(135deg, ${C.brand}, #007a87)`, color: "#fff", fontFamily: "'Bebas Neue'", fontSize: 17, letterSpacing: 2, whiteSpace: "nowrap" }}>
                   Find Eye Doctor
                 </button>
               </div>
