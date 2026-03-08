@@ -36,7 +36,7 @@ export default function EyeDiseaseClassifierPanel({ onBack }) {
     try {
       const formData = new FormData();
       formData.append("image", selectedFile);
-      const token = localStorage.getItem("token");
+      const token = sessionStorage.getItem("token");
 
       const res = await fetch("/api/eye-disease/classify", {
         method: "POST",

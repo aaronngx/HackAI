@@ -408,7 +408,7 @@ export default function DiseaseReportPage() {
         storedInput = null;
       }
 
-      const token = localStorage.getItem("token");
+      const token = sessionStorage.getItem("token");
       if (token) {
         const history = await fetchEyeDiagnosticHistory(token);
         if (cancelled) return;
