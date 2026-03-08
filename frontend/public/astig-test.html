@@ -105,17 +105,17 @@
   <div id="msg-overlay"></div>
   <div id="dist-badge">—</div>
 
-  <!-- MDSF left/right tap buttons (shown only during response) -->
+  <!-- MDSF Yes/No detection buttons (shown during MDSF_SHOW) -->
   <div id="mdsf-btns" style="display:none;position:absolute;bottom:32px;left:0;width:100%;
-    display:none;justify-content:space-between;padding:0 40px;box-sizing:border-box;pointer-events:none;">
-    <button id="btn-mdsf-left"  onclick="handleMDSFResponse('left')"
-      style="pointer-events:all;padding:18px 48px;font-size:20px;font-weight:800;
-      background:rgba(255,255,255,0.1);border:2px solid rgba(255,255,255,0.3);
-      border-radius:14px;color:#fff;cursor:pointer;">← LEFT</button>
-    <button id="btn-mdsf-right" onclick="handleMDSFResponse('right')"
-      style="pointer-events:all;padding:18px 48px;font-size:20px;font-weight:800;
-      background:rgba(255,255,255,0.1);border:2px solid rgba(255,255,255,0.3);
-      border-radius:14px;color:#fff;cursor:pointer;">RIGHT →</button>
+    justify-content:center;gap:24px;padding:0 40px;box-sizing:border-box;pointer-events:none;">
+    <button id="btn-mdsf-no"
+      style="pointer-events:all;padding:18px 44px;font-size:18px;font-weight:800;
+      background:rgba(0,0,0,0.6);border:2px solid rgba(255,255,255,0.35);
+      border-radius:40px;color:#fff;cursor:pointer;">No, I can't</button>
+    <button id="btn-mdsf-yes"
+      style="pointer-events:all;padding:18px 44px;font-size:18px;font-weight:800;
+      background:#0055CC;border:2px solid #0088FF;
+      border-radius:40px;color:#fff;cursor:pointer;">Yes, I can</button>
   </div>
 
   <!-- head-lost toast -->
@@ -157,8 +157,10 @@
     <div style="position:relative;display:inline-block;margin:8px 0;">
       <canvas id="mono-preview" width="280" height="210"
         style="border-radius:10px;background:#111;display:block;transform:scaleX(-1);"></canvas>
-      <div id="mono-face-badge" style="position:absolute;top:6px;left:6px;font-size:11px;font-weight:700;
+        <div id="mono-face-badge" style="position:absolute;top:6px;left:6px;font-size:11px;font-weight:700;
         padding:3px 8px;border-radius:6px;background:#FF4444;color:#fff;">No Face</div>
+      <div id="mono-light-badge" style="position:absolute;top:6px;right:6px;font-size:11px;font-weight:700;
+        padding:3px 8px;border-radius:6px;background:#888;color:#fff;">Light…</div>
     </div>
     <div id="cover-status" style="font-size:20px;font-weight:800;color:#FFD700;">—</div>
     <div id="cover-bar-wrap"><div id="cover-bar"></div></div>
@@ -172,48 +174,93 @@
     </div>
   </div>
 
+  <!-- ═══ OVERLAY: Axis-check positioning (Stage 2) ═══ -->
+  <div class="ov hidden" id="ov-axis-pos">
+    <h2>Step 2 — Confirm Your Position</h2>
+    <p>Sit at a comfortable distance from the screen — roughly <strong>arm's length (~30–40 cm)</strong>.</p>
+    <p>A blue letter will appear. It should look <strong>sharp and clearly readable</strong>.<br>
+       <em>This step is just to record your testing distance — no need to move.</em></p>
+    <div class="btn-row">
+      <button class="btn btn-blue" id="btn-axpos-start">Show letter →</button>
+    </div>
+  </div>
+  <!-- floating Continue — shown while letter is on canvas -->
+  <div id="axpos-float" style="display:none;position:absolute;bottom:36px;left:50%;
+    transform:translateX(-50%);z-index:55;text-align:center;
+    background:rgba(0,0,0,0.75);border:1px solid #333;border-radius:12px;padding:12px 28px;">
+    <div id="axpos-dist" style="font-size:22px;font-weight:900;color:#00FF88;">— cm</div>
+    <div style="color:#aaa;font-size:12px;margin-top:3px;">Can you see the letter clearly?</div>
+    <button class="btn btn-blue" id="btn-axpos-cont" style="font-size:17px;padding:12px 36px;margin-top:10px;">Yes, continue →</button>
+  </div>
+
   <!-- ═══ OVERLAY: Axis intro ═══ -->
   <div class="ov hidden" id="ov-axis-intro">
-    <h2>Step 1 — Find Astigmatic Axis</h2>
-    <p>You'll see <strong>two sets of lines</strong> appear one after the other.<br>
-       Press <strong>1</strong> if the <em>first</em> looked sharper, or <strong>2</strong> if the <em>second</em> did.</p>
-    <p>There are no right or wrong answers — trust your instinct.</p>
+    <h2>Step 3 — Find Astigmatic Axis</h2>
+    <p>Two blue circles will appear on screen <strong>at the same time</strong> — one on top, one below.<br>
+       Each circle contains <strong>striped lines</strong> at a slightly different angle.</p>
+    <p>Choose which circle's lines look <strong>sharper or clearer</strong> to you:</p>
+    <div style="font-size:15px;line-height:1.9;text-align:left;display:inline-block;margin:4px 0 8px;">
+      <span style="color:#0af;">●</span> Press <strong>1</strong> — Upper circle looks clearer<br>
+      <span style="color:#0af;">●</span> Press <strong>2</strong> — Lower circle looks clearer<br>
+      <span style="color:#888;">●</span> Press <strong>3</strong> — Both look the same
+    </div>
+    <p>There are no right or wrong answers — trust your first instinct.</p>
     <div class="btn-row">
       <button class="btn btn-green" id="btn-axis-start">Begin →</button>
     </div>
-    <p class="note">~6 comparisons · Keep your head still · Lines will appear in blue</p>
+    <p class="note">~6 comparisons · Head still · Circles use blue tripole lines</p>
   </div>
 
   <!-- ═══ OVERLAY: MDSF intro ═══ -->
   <div class="ov hidden" id="ov-mdsf-intro">
-    <h2>Step 2 — Resolution Test</h2>
-    <p>Fine lines will appear on the <strong>LEFT</strong> or <strong>RIGHT</strong> side.<br>
-       Press <strong>← Left</strong> or <strong>→ Right</strong> (or tap the buttons) to say which side.<br>
-       The test alternates between two orientations — just say where you see lines.</p>
+    <h2>Step 4 — Can You See the Lines?</h2>
+    <p>A circle full of fine diagonal lines will appear in the centre of the screen.</p>
+    <p>Your only job is to answer <strong>one simple question</strong> each trial:</p>
+    <div style="font-size:16px;line-height:2;text-align:left;display:inline-block;margin:4px 0 10px;background:rgba(255,255,255,0.06);border-radius:10px;padding:10px 24px;">
+      <span style="color:#0af;">●</span> <strong>Yes, I can</strong> — you can see lines in the circle clearly<br>
+      <span style="color:#888;">●</span> <strong>No, I can't</strong> — lines look blurry or you can't see them
+    </div>
+    <p>The lines will get finer or coarser based on your answers.<br>
+       <strong>~10 trials total</strong> — trust your first impression.</p>
     <div class="btn-row">
       <button class="btn btn-green" id="btn-mdsf-start">Begin →</button>
     </div>
-    <p class="note">10 trials total · Both meridians interleaved · ~21 seconds</p>
+    <p class="note">Keyboard shortcuts: Y = Yes · N = No · Keep your covered eye covered</p>
   </div>
 
-  <!-- ═══ OVERLAY: Far-point walk-back ═══ -->
+  <!-- ═══ OVERLAY: Far-point instructions (shown before grating appears) ═══ -->
   <div class="ov hidden" id="ov-farpoint">
-    <h2 id="fp-title">Step 3 — Far Point (Meridian 1)</h2>
-    <p>Sit <strong>close to the screen (~30 cm)</strong> so the lines are clearly visible.<br>
-       Then <strong>slowly lean back</strong> until the lines blur or disappear.<br>
-       <strong>Hold still</strong> at that distance — it will auto-capture.</p>
-    <div id="fp-dist"   style="font-size:34px;font-weight:900;color:#00FF88;letter-spacing:2px;">— cm</div>
-    <div id="fp-cpd"    style="font-size:12px;color:#555;">— CPD at this distance</div>
-    <div id="fp-status" style="font-size:14px;color:#aaa;margin-top:4px;">Move back slowly…</div>
-    <!-- Hold progress bar -->
-    <div id="fp-hold-wrap" style="width:260px;height:8px;background:#222;border-radius:4px;overflow:hidden;display:none;margin-top:8px;">
+    <h2 id="fp-title">Step 5 — Far Point (Meridian 1)</h2>
+    <p>After tapping <strong>Start</strong>, a circle of lines will appear on screen.</p>
+    <ol style="text-align:left;line-height:2;font-size:15px;margin:6px 0 10px;padding-left:20px;">
+      <li>Start <strong>close to the screen</strong> — lines should look clear</li>
+      <li>Slowly <strong>lean back</strong> until the lines <strong>blur or disappear</strong></li>
+      <li>When they're just barely blurry — tap <strong>Lock in position</strong></li>
+    </ol>
+    <div id="fp-cpd" style="font-size:13px;color:#66aaff;margin-bottom:6px;">— CPD grating</div>
+    <p class="note">Keep your <span id="fp-eye">right</span> eye covered throughout.</p>
+    <div class="btn-row" style="margin-top:14px;">
+      <button class="btn btn-blue" id="btn-fp-start">Start →</button>
+    </div>
+  </div>
+
+  <!-- Floating panel visible while grating is on screen -->
+  <div id="fp-float" style="display:none;position:absolute;bottom:20px;left:50%;
+    transform:translateX(-50%);z-index:55;text-align:center;
+    background:rgba(0,0,0,0.78);border:1px solid #333;border-radius:14px;padding:14px 28px;">
+    <div id="fp-face-badge" style="font-size:11px;margin-bottom:4px;color:#555;">● camera tracking</div>
+    <div id="fp-dist" style="font-size:30px;font-weight:900;color:#00FF88;letter-spacing:2px;">— cm</div>
+    <div id="fp-status" style="font-size:13px;color:#aaa;margin-top:2px;">Slowly lean back…</div>
+    <div id="fp-hold-wrap" style="width:220px;height:6px;background:#222;border-radius:3px;
+      overflow:hidden;margin:8px auto 0;">
       <div id="fp-hold-bar" style="height:100%;background:#00FF88;width:0%;transition:width .05s;"></div>
     </div>
-    <div id="fp-hold-label" style="font-size:11px;color:#555;margin-top:4px;display:none;">Hold still to capture…</div>
-    <div class="btn-row" style="margin-top:12px;">
-      <button class="btn btn-gray" id="btn-fp-skip">Cannot tell (skip)</button>
+    <div id="fp-hold-label" style="font-size:11px;color:#555;margin-top:3px;">Hold still to auto-capture…</div>
+    <div style="display:flex;gap:14px;margin-top:12px;justify-content:center;">
+      <button class="btn btn-gray"  id="btn-fp-skip"  style="padding:10px 20px;font-size:14px;">Skip</button>
+      <button class="btn btn-green" id="btn-fp-lock"  style="padding:10px 26px;font-size:15px;font-weight:800;">🔒 Lock in position</button>
     </div>
-    <p class="note" style="margin-top:8px;">Keep your <span id="fp-eye">right</span> eye covered throughout.</p>
+    <div style="font-size:11px;color:#555;margin-top:6px;">or press <strong>Enter</strong> to lock in</div>
   </div>
 
   <!-- ═══ OVERLAY: Results ═══ -->
@@ -361,7 +408,7 @@
 // ─── Imports ─────────────────────────────────────────────────────────────────
 import { DisplayCalibrator, CARD_W_MM, CARD_H_MM } from '/display-calibrator.js';
 import { DistanceSmoother }    from '/distance-smoother.js';
-import { StimulusRenderer }    from '/stimulus-renderer.js';
+import { StimulusRenderer, STIM_BLUE, STIM_RED } from '/stimulus-renderer.js';
 import { MonocularEnforcer }   from '/monocular-enforcer.js';
 import { FastAxisEngine }      from '/fast-axis-engine.js';
 import { InterleavedStaircase } from '/staircase-engine.js';
@@ -379,15 +426,15 @@ fetch(HAND_MODEL).catch(() => {});
 
 const AXIS_CPD      = 3.0;   // CPD for axis tripole stimuli
 const AXIS_DUR_MS   = 700;   // each interval duration
-const AXIS_ISI_MS   = 150;   // blank between intervals
-const AXIS_READY_MS = 400;   // "GET READY" pause
+const AXIS_ISI_MS   = 300;   // blank between intervals
+const AXIS_READY_MS = 1500;  // "GET READY" pause before each pair
 
 const MDSF_DUR_MS     = 700;   // grating display duration
-const MDSF_ISI_MS     = 300;   // fixation before trial
-const MDSF_FB_MS      = 300;   // feedback flash duration
-const MDSF_TIMEOUT_MS = 6000;  // auto-advance if no response
+const MDSF_ISI_MS     = 700;   // fixation before trial (give time to reset gaze)
+const MDSF_FB_MS      = 600;   // brief pause after each response before next trial
+const MDSF_TIMEOUT_MS = 8000;  // auto-advance as "no" if no response
 
-const FP_HOLD_MS     = 1500; // ms to hold still for auto-capture
+const FP_HOLD_MS     = 3000; // ms to hold still for auto-capture (fallback)
 const HEAD_GATE_MS   = 1000; // ms of face-loss before pausing trial
 
 // ─── DOM helpers ─────────────────────────────────────────────────────────────
@@ -478,6 +525,13 @@ let fp2ResultMm  = null;
 let fpMeridian   = 1;
 let fpTargetCPD  = 3; // spatial frequency for far-point grating
 
+// Paper-aligned Stage 2–5 state variables
+let axisCheckDistanceMm = null; // Stage 2: user-confirmed distance at axis-check pos
+let fp1ResultBlueMm = null;     // Stage 5: blue-fallback far point, meridian 1
+let fp2ResultBlueMm = null;     // Stage 5: blue-fallback far point, meridian 2
+let fpColorMode = 'RED';        // 'RED' | 'BLUE' — current far-point stimulus color
+let lightStatus = null;         // Stage 1: 'ok' | 'dark' | 'bright' | null
+
 // Head-gating
 let headLostT    = null;
 let headGated    = false;
@@ -505,7 +559,7 @@ window.addEventListener('resize', resizeCanvas);
 resizeCanvas();
 
 // ─── Overlay helpers ─────────────────────────────────────────────────────────
-const OV_IDS = ['ov-display-cal','ov-loading','ov-monocular','ov-axis-intro',
+const OV_IDS = ['ov-display-cal','ov-loading','ov-monocular','ov-axis-pos','ov-axis-intro',
                  'ov-mdsf-intro','ov-farpoint','ov-results'];
 function showOv(id)  { OV_IDS.forEach(o => D(o).classList.toggle('hidden', o !== id)); }
 function hideAllOv() { OV_IDS.forEach(o => D(o).classList.add('hidden')); }
@@ -659,9 +713,158 @@ function goToMonocularSetup() {
   );
   enforcer.reset();
   showLabel(''); showMsg(''); setProgress('');
+
+  // Stage 1 — ambient light measurement (runs once per eye setup).
+  // Tries three methods in order of accuracy:
+  //   1. AmbientLightSensor API  → true lux from device hardware sensor
+  //   2. ImageCapture exposure   → lux calculated from camera EV (exposureTime × ISO)
+  //   3. Camera luma fallback    → rough lux estimate from pixel brightness
+  async function checkAmbientLight() {
+    const badge = D('mono-light-badge');
+    badge.textContent = 'Checking…';
+    badge.style.background = '#555';
+
+    let luxValue  = null;   // numeric lux, null = unavailable
+    let method    = '';     // label shown to user
+
+    // ── Method 1: AmbientLightSensor API (Chrome + some Android) ──────────────
+    if ('AmbientLightSensor' in window) {
+      try {
+        await new Promise((resolve, reject) => {
+          const sensor = new AmbientLightSensor({ frequency: 5 });
+          const tid = setTimeout(() => { sensor.stop(); reject(new Error('timeout')); }, 1500);
+          sensor.addEventListener('reading', () => {
+            luxValue = sensor.illuminance;
+            clearTimeout(tid);
+            sensor.stop();
+            resolve();
+          });
+          sensor.addEventListener('error', e => { clearTimeout(tid); reject(e); });
+          sensor.start();
+        });
+        method = 'sensor';
+      } catch (_) { /* fall through */ }
+    }
+
+    // ── Method 2: ImageCapture exposure (Chrome desktop, some Android) ────────
+    if (luxValue === null && stream) {
+      try {
+        const track = stream.getVideoTracks()[0];
+        const settings = track.getSettings();
+        // exposureTime is in microseconds in the spec, but Chrome returns it in 100µs units — try both
+        const expSec   = settings.exposureTime
+          ? (settings.exposureTime < 1 ? settings.exposureTime : settings.exposureTime / 1e6)
+          : null;
+        const iso      = settings.iso ?? null;
+        if (expSec && iso && expSec > 0 && iso > 0) {
+          // EV100 = log2(N² / (t × ISO / 100)) — assume f/2.0 (typical phone lens)
+          const f    = 2.0;
+          const ev100 = Math.log2((f * f) / (expSec * iso / 100));
+          // Lux from EV100: L = 2.5 × 2^EV100  (Sekonic/CIPA standard)
+          luxValue = 2.5 * Math.pow(2, ev100);
+          method   = 'exposure';
+        }
+      } catch (_) { /* fall through */ }
+    }
+
+    // ── Method 3: Camera luma fallback ────────────────────────────────────────
+    if (luxValue === null) {
+      // Wait for a settled video frame
+      await new Promise(r => {
+        if (video.readyState >= 2) { setTimeout(r, 350); return; }
+        video.addEventListener('loadeddata', () => setTimeout(r, 350), { once: true });
+      });
+
+      const tmp = document.createElement('canvas');
+      tmp.width = 64; tmp.height = 64;
+      const ctx2 = tmp.getContext('2d', { willReadFrequently: true });
+      ctx2.drawImage(video, 0, 0, 64, 64);
+      const imgData = ctx2.getImageData(0, 0, 64, 64);
+
+      // Check for blank/tainted canvas
+      let minV = 255, maxV = 0;
+      for (let i = 0; i < imgData.data.length; i += 4) {
+        minV = Math.min(minV, imgData.data[i]);
+        maxV = Math.max(maxV, imgData.data[i]);
+      }
+
+      if (maxV - minV < 5) {
+        // Canvas is blank — cannot measure; skip and assume OK
+        lightStatus = 'ok';
+        badge.textContent = 'Light ?';
+        badge.style.background = '#555';
+        return;
+      }
+
+      let luma = 0;
+      for (let i = 0; i < imgData.data.length; i += 4)
+        luma += imgData.data[i] * 0.299 + imgData.data[i + 1] * 0.587 + imgData.data[i + 2] * 0.114;
+      luma /= (64 * 64);
+
+      // Map luma (auto-exposed camera, ~128 = mid-gray ≈ 300 lux typical indoor).
+      // Logarithmic mapping calibrated to typical webcam auto-exposure curves.
+      luxValue = Math.round(10 ** (luma / 255 * 3.8));
+      method   = 'camera';
+    } else {
+      luxValue = Math.round(luxValue);
+    }
+
+    // ── Classify and display ──────────────────────────────────────────────────
+    lightStatus = luxValue < 50 ? 'dark' : luxValue > 2000 ? 'bright' : 'ok';
+
+    const methodLabel = method === 'sensor'   ? 'sensor'
+                      : method === 'exposure' ? 'EV calc'
+                      :                        '~est.';
+
+    if (lightStatus === 'ok') {
+      badge.textContent  = `${luxValue} lx ✓`;
+      badge.style.background = '#00AA55';
+    } else {
+      const warn = lightStatus === 'dark' ? 'dark' : 'bright';
+      badge.textContent  = `${luxValue} lx ⚠ ${warn}`;
+      badge.style.background = '#AA6600';
+      D('cover-status').textContent = lightStatus === 'dark'
+        ? `⚠ Only ${luxValue} lx — room too dark, add more light`
+        : `⚠ ${luxValue} lx — too bright, reduce glare`;
+      D('cover-status').style.color = '#FFB300';
+      irisSpeak(lightStatus === 'dark'
+        ? `Warning: only ${luxValue} lux detected. Please increase room lighting before continuing.`
+        : `Warning: ${luxValue} lux is very bright. Try reducing screen brightness or moving away from glare.`
+      );
+    }
+
+    // Small tooltip showing measurement method
+    badge.title = `Measured via: ${methodLabel}. Recommended: 50–2000 lx.`;
+  }
+  checkAmbientLight();
 }
-D('btn-mono-confirm').onclick = () => beginAxisSearch();
-D('btn-mono-skip').onclick    = () => beginAxisSearch();
+D('btn-mono-confirm').onclick = () => beginAxisCheckPos();
+D('btn-mono-skip').onclick    = () => beginAxisCheckPos();
+
+// ─── Stage 2: Axis-check positioning ────────────────────────────────────────
+function beginAxisCheckPos() {
+  axisCheckDistanceMm = null;
+  D('axpos-float').style.display = 'none';
+  showOv('ov-axis-pos');
+  setState('AXIS_CHECK_POS');
+  irisSpeak(
+    "Step 2. Sit at arm's length from the screen — about 30 to 40 centimetres. " +
+    "A blue letter will appear. If you can read it clearly, tap Continue to lock in your position."
+  );
+}
+
+// "Show letter" — dismiss the dark overlay so the canvas letter is visible
+D('btn-axpos-start').onclick = () => {
+  hideAllOv();
+  D('axpos-float').style.display = 'block';
+};
+
+// "Continue" (floating) — user has found their blurry distance
+D('btn-axpos-cont').onclick = () => {
+  D('axpos-float').style.display = 'none';
+  axisCheckDistanceMm = lastDistMm;
+  beginAxisSearch();
+};
 
 // ─── Axis search ─────────────────────────────────────────────────────────────
 function beginAxisSearch() {
@@ -672,9 +875,9 @@ function beginAxisSearch() {
   hideAllOv(); showOv('ov-axis-intro');
   setState('AXIS_INTRO');
   irisSpeak(
-    "Phase two: axis search. You'll see two sets of striped lines appear on screen, one at a time. " +
-    "Your job is to decide which set of lines looks sharper or clearer to you. " +
-    "Press the number 1 if the first pattern is clearer, or press 2 if the second is clearer. " +
+    "Phase two: axis search. You'll see two circles appear on screen at the same time — one on top and one below. " +
+    "Each circle contains a striped pattern. Your job is to decide which circle looks clearer. " +
+    "Press 1 for Upper, press 2 for Lower, or press 3 if they look the same. " +
     "There will be about six comparisons. Trust your first instinct and answer quickly. When you're ready, click the start button."
   );
 }
@@ -682,7 +885,7 @@ D('btn-axis-start').onclick = () => {
   hideAllOv(); setState('AXIS');
   stimStateT = performance.now();
   showLabel(''); showMsg(''); setProgress('');
-  irisSpeak("Here we go. Watch for the patterns and press 1 or 2 for each comparison.");
+  irisSpeak("Here we go. Two circles will appear. Press 1 for Upper, 2 for Lower, or 3 if they look the same.");
 };
 function startNextAxisPair() {
   axisPair   = axisEngine.nextPair();
@@ -709,7 +912,7 @@ function beginMDSF() {
   setState('MDSF_INTRO');
   irisSpeak(
     "Great work on the axis test! Now phase three: the resolution staircase. " +
-    "A grating pattern will flash briefly on either the left or the right side of the screen. " +
+    "A blue striped pattern will flash briefly on either the left or the right side of the screen. " +
     "Press the left arrow key if you saw it on the left, or the right arrow key if you saw it on the right. " +
     "The pattern will gradually get finer and harder to see — that's normal and expected. Do your best and don't worry if you're unsure. There are ten trials total."
   );
@@ -721,7 +924,6 @@ D('btn-mdsf-start').onclick = () => {
 };
 function startMDSFTrial() {
   curMeridianTrial = interleavedSC.nextTrial(); // { meridian, axis, cpd }
-  mdsfSide   = Math.random() < 0.5 ? 'left' : 'right';
   stimState  = 'MDSF_ISI';
   stimStateT = performance.now();
   D('mdsf-btns').style.display = 'none';
@@ -732,51 +934,101 @@ function startMDSFTrial() {
 // ─── Far-point walk-back (hold-capture) ───────────────────────────────────────
 function beginFarPoint(num) {
   fpMeridian = num;
-  if (num === 1) holdCapture1 = new HoldCapture(FP_HOLD_MS);
-  else           holdCapture2 = new HoldCapture(FP_HOLD_MS);
+  // holdCapture is created when the user actually starts (btn-fp-start click)
   const axisAngle = num === 1 ? (foundAxis ?? 0) : ((foundAxis ?? 0) + 90) % 180;
-  // Target CPD = 65% of MDSF threshold for this meridian
   const thr = interleavedSC ? interleavedSC.threshold(num - 1) : 3;
   fpTargetCPD = Math.max(1, thr * 0.65);
-  D('fp-title').textContent   = `Step ${num + 2} — Far Point (Meridian ${num}: ${axisAngle}°)`;
-  D('fp-eye').textContent     = currentEye;
-  D('fp-status').textContent  = 'Move back slowly until lines blur, then hold still…';
-  D('fp-dist').textContent    = '— cm';
-  D('fp-cpd').textContent     = `${fpTargetCPD.toFixed(1)} CPD grating`;
-  D('fp-hold-wrap').style.display  = 'block';
-  D('fp-hold-label').style.display = 'block';
-  D('fp-hold-bar').style.width     = '0%';
-  showOv('ov-farpoint');
-  setState(num === 1 ? 'FAR_POINT_1' : 'FAR_POINT_2');
+  D('fp-title').textContent = `Step 5 — Far Point (Meridian ${num}: ${axisAngle}°)`;
+  D('fp-eye').textContent   = currentEye;
+  D('fp-cpd').textContent   = `${fpTargetCPD.toFixed(1)} CPD grating`;
+  D('fp-dist').textContent  = '— cm';
+  D('fp-hold-bar').style.width = '0%';
+  D('fp-float').style.display  = 'none';
+  showOv('ov-farpoint');       // show instructions — grating NOT visible yet
   showLabel(''); showMsg('');
   if (num === 1) {
     irisSpeak(
-      "Phase four: far-point measurement. Start by sitting close to your screen, then slowly lean back. " +
-      "A striped pattern is displayed — keep looking at it as you move away. " +
-      "When the lines begin to blur or disappear, stop moving and hold perfectly still for about two seconds. " +
-      "I will automatically capture your distance. There are two measurements — this is the first one."
+      "Step 5: far-point measurement. Read the instructions, then tap Start. " +
+      "Move close to the screen first, then slowly lean back until the lines blur. " +
+      "When they're just barely blurry, tap Lock in position or press Enter."
     );
   } else {
     irisSpeak(
-      "One more measurement. Same thing — hold still when the pattern blurs and I'll capture your distance automatically."
+      "One more measurement for the second meridian. Same thing — start close, lean back until lines blur, then lock in your position."
     );
   }
 }
+
+D('btn-fp-start').onclick = () => {
+  hideAllOv();
+  D('fp-float').style.display = 'block';
+  D('fp-status').textContent  = 'Slowly lean back until lines blur…';
+  // Start hold-capture only now (user is actively doing the task)
+  if (fpMeridian === 1) holdCapture1 = new HoldCapture(FP_HOLD_MS);
+  else                  holdCapture2 = new HoldCapture(FP_HOLD_MS);
+  setState(fpMeridian === 1 ? 'FAR_POINT_1' : 'FAR_POINT_2');
+  irisSpeak("Start close, then slowly lean back. Tap Lock in position when lines are just blurry.");
+};
+
+D('btn-fp-lock').onclick = () => {
+  if (appState !== 'FAR_POINT_1' && appState !== 'FAR_POINT_2') return;
+  autoCaptureFarPoint(lastDistMm);
+};
 function autoCaptureFarPoint(mm) {
+  D('fp-float').style.display = 'none';
   const cm = (mm / 10).toFixed(1);
+
+  // Handle BLUE-fallback capture first
+  if (fpColorMode === 'BLUE') {
+    if (fpMeridian === 1) {
+      fp1ResultBlueMm = mm;
+      showLabel(`FP1-Blue: ${cm} cm`, '#44AAFF');
+    } else {
+      fp2ResultBlueMm = mm;
+      showLabel(`FP2-Blue: ${cm} cm`, '#44AAFF');
+    }
+    fpColorMode = 'RED'; // reset for next stage
+    const doneState = fpMeridian === 1 ? 'FAR_POINT_1_DONE' : 'FAR_POINT_2_DONE';
+    setState(doneState);
+    setTimeout(() => {
+      showLabel('');
+      if (fpMeridian === 1) beginFarPoint(2);
+      else showResults();
+    }, 1800);
+    return;
+  }
+
+  // RED capture — primary measurement
   if (fpMeridian === 1) {
     fp1ResultMm = mm;
-    showLabel(`FP1: ${cm} cm`, '#00FF88');
+    showLabel(`FP1-Red: ${cm} cm`, '#FF6644');
     setState('FAR_POINT_1_DONE');
-    setTimeout(() => { showLabel(''); beginFarPoint(2); }, 1800);
+    setTimeout(() => {
+      showLabel('');
+      if (FarPointCapture.needsBlueFallback(mm)) {
+        fpColorMode = 'BLUE';
+        beginFarPoint(1); // re-run meridian 1 with BLUE stimulus
+      } else {
+        beginFarPoint(2);
+      }
+    }, 1800);
   } else {
     fp2ResultMm = mm;
-    showLabel(`FP2: ${cm} cm`, '#00FF88');
+    showLabel(`FP2-Red: ${cm} cm`, '#FF6644');
     setState('FAR_POINT_2_DONE');
-    setTimeout(() => { showLabel(''); showResults(); }, 1800);
+    setTimeout(() => {
+      showLabel('');
+      if (FarPointCapture.needsBlueFallback(mm)) {
+        fpColorMode = 'BLUE';
+        beginFarPoint(2); // re-run meridian 2 with BLUE stimulus
+      } else {
+        showResults();
+      }
+    }, 1800);
   }
 }
 D('btn-fp-skip').onclick = () => {
+  D('fp-float').style.display = 'none';
   if (fpMeridian === 1) {
     fp1ResultMm = null; setState('FAR_POINT_1_DONE');
     setTimeout(() => beginFarPoint(2), 200);
@@ -786,44 +1038,62 @@ D('btn-fp-skip').onclick = () => {
   }
 };
 
-// ─── Keyboard input ───────────────────────────────────────────────────────────
+// ─── MDSF button handlers (must be in module scope — no inline onclick) ───────
 function handleMDSFResponse(resp) {
-  if (stimState !== 'MDSF_RESPONSE') return;
+  if (stimState !== 'MDSF_SHOW' && stimState !== 'MDSF_RESPONSE') return;
   D('mdsf-btns').style.display = 'none';
   reporter.recordResponseMs(performance.now() - stimStateT);
-  const correct = resp === mdsfSide;
-  interleavedSC.trial(correct);
+  const seen = (resp === 'yes');
+  interleavedSC.trial(seen);
   stimState  = 'MDSF_FEEDBACK';
   stimStateT = performance.now();
-  showLabel(correct ? '✓' : '✗', correct ? '#00FF88' : '#FF4444');
+  showLabel('');   // no correct/wrong label — this is a detection task, not a quiz
   showMsg('');
 }
+D('btn-mdsf-no').onclick  = () => handleMDSFResponse('no');
+D('btn-mdsf-yes').onclick = () => handleMDSFResponse('yes');
 
 document.addEventListener('keydown', e => {
-  // Axis: 1 or 2
-  if (appState === 'AXIS' && axisStep === 4 && (e.key === '1' || e.key === '2')) {
+  // Axis: 1 (Upper), 2 (Lower), or 3/s (Same — skip this pair, no response recorded)
+  if (appState === 'AXIS' && axisStep === 2 && (e.key === '1' || e.key === '2' || e.key === '3' || e.key === 's' || e.key === 'S')) {
+    const isSame = (e.key === '3' || e.key === 's' || e.key === 'S');
     const rt = performance.now() - stimStateT;
     reporter.recordResponseMs(rt);
-    axisEngine.recordResponse(+e.key, rt);
+
+    if (isSame) {
+      // "Same" — randomly pick 1 or 2 to avoid biasing the axis estimate
+      axisEngine.recordResponse(Math.random() < 0.5 ? 1 : 2, rt);
+    } else {
+      axisEngine.recordResponse(+e.key, rt);
+    }
+
     if (axisEngine.isDone()) {
       foundAxis = axisEngine.getFinalAxis();
       axisConf  = axisEngine.getAxisConfidence();
+      renderer.drawFixation();
       showLabel(`AXIS: ${foundAxis}°`, '#00FF88');
       showMsg('Axis found! Starting resolution test…', 2000);
       setProgress('');
       setState('AXIS_DONE');
       setTimeout(() => beginMDSF(), 2200);
     } else {
-      axisStep = 0;
+      axisStep = 0; // queue next pair
     }
   }
 
-  // MDSF: ← → or 1/2
-  if (appState === 'MDSF' && stimState === 'MDSF_RESPONSE') {
+  // MDSF: Y / N keys as shortcuts for Yes / No
+  if (appState === 'MDSF' && (stimState === 'MDSF_SHOW' || stimState === 'MDSF_RESPONSE')) {
     let resp = null;
-    if (e.key === 'ArrowLeft'  || e.key === '1') resp = 'left';
-    if (e.key === 'ArrowRight' || e.key === '2') resp = 'right';
+    if (e.key === 'y' || e.key === 'Y' || e.key === '1') resp = 'yes';
+    if (e.key === 'n' || e.key === 'N' || e.key === '2') resp = 'no';
     if (resp) handleMDSFResponse(resp);
+  }
+
+  // Far-point: Enter or Space to manually lock in current distance
+  if ((appState === 'FAR_POINT_1' || appState === 'FAR_POINT_2') &&
+      (e.key === 'Enter' || e.key === ' ')) {
+    e.preventDefault();
+    autoCaptureFarPoint(lastDistMm);
   }
 });
 
@@ -854,7 +1124,10 @@ function showResults() {
 
   let ref = null;
   if (fp1ResultMm || fp2ResultMm) {
-    ref = FarPointCapture.computeRefractionV3(fp1ResultMm, fp2ResultMm, foundAxis ?? 0);
+    ref = FarPointCapture.computeRefractionV4(
+      fp1ResultMm, fp2ResultMm, foundAxis ?? 0,
+      fp1ResultBlueMm, fp2ResultBlueMm
+    );
   }
 
   // Snellen from threshold CPD
@@ -865,7 +1138,7 @@ function showResults() {
   const eyeData   = {
     coveredEye: currentEye, testedEye,
     axis: foundAxis, axisConf,
-    protocol: 'v3',
+    protocol: 'v4-lca',
     mdsf1: t1, mdsf2: t2,
     sn1: toSnellen(t1), sn2: toSnellen(t2),
     fp1Mm: fp1ResultMm, fp2Mm: fp2ResultMm,
@@ -925,8 +1198,8 @@ function showResults() {
     const myoLabel  = ConfidenceReporter.myopiaLabel(ref.sph);
     const astigLbl  = ConfidenceReporter.astigLabel(ref.cyl);
     D('r-severity').textContent = `${myoLabel} · ${astigLbl}`;
-    // Method note
-    D('r-note').textContent = `${ref.note} · Tripole axis search, grating far-point.`;
+    // Method note (includes LCA correction status from computeRefractionV4)
+    D('r-note').textContent = `${ref.note}${ref.colorNote ?? ''}`;
   } else {
     ['r-sph','r-cyl','r-fp1','r-fp2'].forEach(id => D(id).textContent = 'skipped');
     D('r-raxis').textContent = '—'; D('r-note').textContent = '';
@@ -980,6 +1253,12 @@ function resetEyeState() {
   fp1ResultMm   = null; fp2ResultMm   = null;
   curMeridianTrial = null;
   axisStep      = 0;    stimState     = 'IDLE';
+  // Paper-aligned state reset
+  fp1ResultBlueMm     = null;
+  fp2ResultBlueMm     = null;
+  fpColorMode         = 'RED';
+  axisCheckDistanceMm = null;
+  lightStatus         = null;
   showLabel(''); showMsg(''); setProgress('');
   smoother.reset(); enforcer.reset(); reporter.reset();
   headLostT = null; headGated = false;
@@ -1159,7 +1438,7 @@ function renderLoop(ts) {
       D('cover-status').textContent = '✓ COVERED';
       D('cover-status').style.color = '#00FF88';
       setState('MONOCULAR_OK');
-      setTimeout(beginAxisSearch, 400);
+      setTimeout(beginAxisCheckPos, 400);
     } else if (coverResult.progress > 0) {
       D('cover-status').textContent = 'Hold steady…';
       D('cover-status').style.color = '#FFD700';
@@ -1170,102 +1449,82 @@ function renderLoop(ts) {
     renderer.drawFixation(); return;
   }
 
-  // ── Axis search (tripole) ─────────────────────────────────────────────────
+  // ── Stage 2: Axis-check positioning — blue letter target ─────────────────
+  if (appState === 'AXIS_CHECK_POS') {
+    renderer.drawLetterTarget({ distMm, mmPerPx, color: STIM_BLUE });
+    // Update distance counter in the floating panel so user can see live face tracking
+    if (smoother.isValid() && D('axpos-dist')) {
+      D('axpos-dist').textContent = `${(distMm / 10).toFixed(0)} cm`;
+      D('axpos-dist').style.color = (distMm > 250 && distMm < 500) ? '#00FF88' : '#FFD700';
+    }
+    return;
+  }
+
+  // ── Axis search — simultaneous upper/lower circles (Stage 3) ────────────
   if (appState === 'AXIS') {
     const elapsed = now - stimStateT;
-    if      (axisStep === 0) { startNextAxisPair(); }
-    else if (axisStep === 1) {
-      renderer.drawFixation(); showLabel('GET READY', '#555');
-      if (elapsed > AXIS_READY_MS) { axisStep = 2; stimStateT = now; }
-    }
-    else if (axisStep === 2) {
-      renderer.drawGrating({ angleDeg: axisPair[0], cpd: AXIS_CPD, distMm, mmPerPx, color: '#0088FF', fixationDot: true, type: 'tripole' });
-      showLabel('FIRST', '#44AAFF');
-      if (elapsed > AXIS_DUR_MS) { axisStep = 3; stimStateT = now; }
-    }
-    else if (axisStep === 3) {
-      renderer.drawFixation(); showLabel('');
-      if (elapsed > AXIS_ISI_MS) {
-        axisStep = 4; stimStateT = now;
-        showLabel('SECOND', '#FF8800');
-        renderer.drawGrating({ angleDeg: axisPair[1], cpd: AXIS_CPD, distMm, mmPerPx, color: '#0088FF', fixationDot: true, type: 'tripole' });
-      }
-    }
-    else if (axisStep === 4) {
-      if (elapsed < AXIS_DUR_MS) {
-        renderer.drawGrating({ angleDeg: axisPair[1], cpd: AXIS_CPD, distMm, mmPerPx, color: '#0088FF', fixationDot: true, type: 'tripole' });
-        showLabel('SECOND', '#FF8800');
-      } else {
-        renderer.drawFixation(); showLabel('');
-        showMsg('Which was SHARPER?   Press  1 (first)  or  2 (second)');
-      }
+    if (axisStep === 0) {
+      startNextAxisPair();
+    } else if (axisStep === 1) {
+      // "GET READY" pause — long enough that user can settle before circles appear
+      renderer.drawFixation();
+      showLabel(elapsed < 800 ? 'GET READY…' : 'LOOK AT THE DOT', '#555');
+      if (elapsed > AXIS_READY_MS) { axisStep = 2; stimStateT = now; showLabel(''); }
+    } else if (axisStep === 2) {
+      // Show both circles simultaneously — user picks Upper (1), Lower (2), or Same (3)
+      renderer.drawDualAxisCircles({
+        angle1: axisPair[0], angle2: axisPair[1],
+        cpd: AXIS_CPD, distMm, mmPerPx, color: STIM_BLUE,
+      });
+      showMsg(''); // prompt is drawn on canvas by drawDualAxisCircles
     }
     setDv('d-ax-prog', axisEngine ? `${axisEngine.getProgress().done}/6` : '—');
     return;
   }
 
-  // ── MDSF (interleaved dual-meridian) ─────────────────────────────────────
+  // ── MDSF — single centered circle, yes/no detection (Stage 4) ──────────
   if (appState === 'MDSF') {
     const elapsed = now - stimStateT;
-    const trialAxis = curMeridianTrial?.axis ?? mdsf1Axis;
-    const trialCPD  = curMeridianTrial?.cpd  ?? 3;
+    const trialAxis     = curMeridianTrial?.axis ?? mdsf1Axis;
+    const trialCPD      = curMeridianTrial?.cpd  ?? 3;
     const meridianLabel = curMeridianTrial?.meridian === 0 ? `${mdsf1Axis}°` : `${mdsf2Axis}°`;
 
     if (stimState === 'MDSF_ISI') {
       renderer.drawFixation();
+      D('mdsf-btns').style.display = 'none';
       if (elapsed > MDSF_ISI_MS) { stimState = 'MDSF_SHOW'; stimStateT = now; }
 
-    } else if (stimState === 'MDSF_SHOW') {
+    } else if (stimState === 'MDSF_SHOW' || stimState === 'MDSF_RESPONSE') {
+      // Draw the grating inside a centered circle
       const ctx = canvas.getContext('2d');
       const W = canvas.width, H = canvas.height;
       ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H);
-      ctx.save();
-      ctx.beginPath();
-      if (mdsfSide === 'left') ctx.rect(0, 0, W/2, H);
-      else                     ctx.rect(W/2, 0, W/2, H);
-      ctx.clip();
-      renderer.drawGrating({ angleDeg: trialAxis, cpd: trialCPD, distMm, mmPerPx, color: '#ffffff', fixationDot: false, type: 'grating' });
-      ctx.restore();
-      // side labels
-      ctx.font = 'bold 18px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'top';
-      ctx.fillStyle = 'rgba(255,255,255,0.25)';
-      ctx.fillText('LEFT',  W/4,   14);
-      ctx.fillText('RIGHT', W*3/4, 14);
-      // centre divider
-      ctx.strokeStyle = '#333'; ctx.lineWidth = 1;
-      ctx.beginPath(); ctx.moveTo(W/2,0); ctx.lineTo(W/2,H); ctx.stroke();
-      // fixation cross
-      ctx.strokeStyle = '#666'; ctx.lineWidth = 2; ctx.beginPath();
-      ctx.moveTo(W/2-12,H/2); ctx.lineTo(W/2+12,H/2);
-      ctx.moveTo(W/2,H/2-12); ctx.lineTo(W/2,H/2+12); ctx.stroke();
-      // meridian indicator (top-right)
-      ctx.fillStyle = '#444'; ctx.font = '11px sans-serif'; ctx.textAlign = 'right';
-      ctx.fillText(`axis ${meridianLabel}`, W - 10, 14);
-      if (elapsed > MDSF_DUR_MS) { stimState = 'MDSF_RESPONSE'; stimStateT = now; }
+      renderer.drawCircleGrating({ angleDeg: trialAxis, cpd: trialCPD, distMm, mmPerPx, color: STIM_BLUE, fixationDot: true });
 
-    } else if (stimState === 'MDSF_RESPONSE') {
-      const ctx = canvas.getContext('2d');
-      const W = canvas.width, H = canvas.height;
-      ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H);
-      ctx.strokeStyle = '#333'; ctx.lineWidth = 1;
-      ctx.beginPath(); ctx.moveTo(W/2,0); ctx.lineTo(W/2,H); ctx.stroke();
-      ctx.font = 'bold 18px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'top';
-      ctx.fillStyle = 'rgba(255,255,255,0.25)';
-      ctx.fillText('LEFT',  W/4,   14);
-      ctx.fillText('RIGHT', W*3/4, 14);
-      ctx.strokeStyle = '#555'; ctx.lineWidth = 2; ctx.beginPath();
-      ctx.moveTo(W/2-12,H/2); ctx.lineTo(W/2+12,H/2);
-      ctx.moveTo(W/2,H/2-12); ctx.lineTo(W/2,H/2+12); ctx.stroke();
-      showMsg('Which side had the pattern?');
+      // "Can you see the lines?" drawn on canvas
+      ctx.font = `bold ${Math.max(16, Math.min(W, H) * 0.05)}px sans-serif`;
+      ctx.textAlign    = 'center';
+      ctx.textBaseline = 'top';
+      ctx.fillStyle    = '#fff';
+      ctx.fillText('Can you see the lines?', W / 2, 10);
+
+      // Meridian indicator (small, bottom-right)
+      ctx.font = '11px sans-serif'; ctx.textAlign = 'right'; ctx.textBaseline = 'bottom';
+      ctx.fillStyle = '#444';
+      ctx.fillText(`axis ${meridianLabel}`, W - 10, H - 10);
+
+      // Always show Yes/No buttons
       D('mdsf-btns').style.display = 'flex';
-      // Auto-advance if no response (counts as wrong, staircase goes easier)
+      stimState = 'MDSF_RESPONSE'; // merge show+response
+
+      // Auto-advance as "no" if no response after timeout
       if (elapsed > MDSF_TIMEOUT_MS) {
-        const wrongSide = mdsfSide === 'left' ? 'right' : 'left';
-        handleMDSFResponse(wrongSide);
+        handleMDSFResponse('no');
       }
 
     } else if (stimState === 'MDSF_FEEDBACK') {
       renderer.drawFixation();
+      D('mdsf-btns').style.display = 'none';
       if (elapsed > MDSF_FB_MS) {
         showLabel('');
         if (interleavedSC.isDone()) {
@@ -1286,12 +1545,37 @@ function renderLoop(ts) {
     return;
   }
 
-  // ── Far-point walk-back (hold-capture) ───────────────────────────────────
+  // ── Far-point walk-back — single centered circle (Stage 5) ──────────────
   if (appState === 'FAR_POINT_1' || appState === 'FAR_POINT_2') {
     const axisAngle = fpMeridian === 1 ? (foundAxis ?? 0) : ((foundAxis ?? 0) + 90) % 180;
-    renderer.drawGrating({ angleDeg: axisAngle, cpd: fpTargetCPD, distMm, mmPerPx, color: '#ffffff', fixationDot: true, type: 'grating' });
+    const fpColor   = fpColorMode === 'BLUE' ? STIM_BLUE : STIM_RED;
+    const ctx       = canvas.getContext('2d');
+    const W         = canvas.width, H = canvas.height;
+    ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H);
+    // Use the distance recorded at test-start (not live distMm) so the
+    // physical stripe width stays FIXED as the user walks back.
+    // Blur from defocus — not the angular size — is what makes lines vanish.
+    const fpRefDist = axisCheckDistanceMm > 0 ? axisCheckDistanceMm : 400;
+    renderer.drawCircleGrating({ angleDeg: axisAngle, cpd: fpTargetCPD, distMm: fpRefDist, mmPerPx, color: fpColor, fixationDot: true });
+    // "Slowly move away" instruction on canvas
+    ctx.font         = `bold ${Math.max(16, Math.min(W, H) * 0.05)}px sans-serif`;
+    ctx.textAlign    = 'center';
+    ctx.textBaseline = 'top';
+    ctx.fillStyle    = '#fff';
+    ctx.fillText('Slowly move away — tap Lock in when lines blur', W / 2, 10);
+    // Update distance counter and face-tracking badge
     if (smoother.isValid()) {
       D('fp-dist').textContent = `${(distMm / 10).toFixed(0)} cm`;
+    }
+    const badge = D('fp-face-badge');
+    if (badge) {
+      if (faceLms) {
+        badge.textContent = '● face detected — tracking distance';
+        badge.style.color = '#00AA55';
+      } else {
+        badge.textContent = '○ face not detected — look at camera';
+        badge.style.color = '#FF4444';
+      }
     }
     // Run hold-capture
     const hc  = fpMeridian === 1 ? holdCapture1 : holdCapture2;
