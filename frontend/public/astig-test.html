@@ -6,12 +6,18 @@
   <title>🧠 HackAI — Eye Screening</title>
   <style>
     *{margin:0;padding:0;box-sizing:border-box;}
-    body{background:#000;color:#e0e0e0;font-family:'Segoe UI',system-ui,sans-serif;height:100vh;overflow:hidden;display:flex;flex-direction:column;}
+    body{background:#000;color:#e8e8e8;font-family:system-ui,-apple-system,'Segoe UI',sans-serif;height:100vh;overflow:hidden;display:flex;flex-direction:column;}
 
-    header{padding:7px 16px;background:#0a0a12;border-bottom:1px solid #1a1a2a;display:flex;align-items:center;gap:12px;flex-shrink:0;}
-    header h1{font-size:14px;color:#00FF88;letter-spacing:1px;}
-    #phase-badge{margin-left:auto;font-size:11px;color:#FFD700;background:#1a1600;border:1px solid #443300;border-radius:4px;padding:2px 8px;}
-    #btn-debug-toggle{background:#1a1a2a;border:1px solid #333;color:#888;border-radius:4px;padding:3px 10px;font-size:11px;cursor:pointer;}
+    /* ── Header ── */
+    header{padding:10px 24px;background:rgba(0,0,0,0.55);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border-bottom:1px solid rgba(255,255,255,0.07);display:flex;align-items:center;gap:14px;flex-shrink:0;}
+    .header-logo{display:flex;align-items:center;gap:8px;}
+    .header-logo-mark{width:26px;height:26px;border-radius:8px;background:linear-gradient(135deg,#00c4d4,#0090a0);display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0;}
+    .header-logo-text{font-size:15px;font-weight:700;color:#fff;letter-spacing:-.2px;}
+    .header-logo-text span{color:#00c4d4;}
+    #phase-badge{font-size:10px;color:rgba(255,255,255,0.3);letter-spacing:.5px;margin-left:2px;}
+    #btn-debug-toggle{background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.08);color:rgba(255,255,255,0.3);border-radius:8px;padding:4px 10px;font-size:11px;cursor:pointer;transition:opacity .15s;}
+    #btn-debug-toggle:hover{opacity:.7;}
+    #btn-recal{background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.08);color:rgba(255,255,255,0.35);border-radius:8px;padding:4px 10px;font-size:11px;cursor:pointer;}
 
     main{flex:1;display:flex;overflow:hidden;min-height:0;}
 
@@ -19,98 +25,117 @@
     #stim-canvas{display:block;width:100%;height:100%;}
     #video{position:fixed;left:-9999px;top:0;width:640px;height:480px;opacity:0;pointer-events:none;}
 
-    /* overlays */
-    .ov{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;background:rgba(0,0,0,0.93);z-index:60;gap:14px;overflow-y:auto;padding:16px;}
+    /* ── Overlays ── */
+    .ov{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;background:rgba(0,0,0,0.88);backdrop-filter:blur(4px);z-index:60;gap:18px;overflow-y:auto;padding:28px 20px;}
     .ov.hidden{display:none;}
-    .ov h2{color:#00FF88;font-size:22px;letter-spacing:1px;}
-    .ov p{color:#aaa;font-size:13px;line-height:1.75;max-width:460px;text-align:center;}
-    .ov .note{font-size:11px;color:#555;max-width:440px;text-align:center;}
+    .ov h2{color:#fff;font-size:24px;font-weight:700;letter-spacing:-.4px;text-align:center;}
+    .ov h2 .accent{color:#00c4d4;}
+    .ov p{color:rgba(255,255,255,0.5);font-size:14px;line-height:1.7;max-width:440px;text-align:center;}
+    .ov .note{font-size:11px;color:rgba(255,255,255,0.22);max-width:420px;text-align:center;}
 
-    .spinner{width:36px;height:36px;border:3px solid #222;border-top-color:#00FF88;border-radius:50%;animation:spin .8s linear infinite;}
+    /* Measures/Why card */
+    .stage-why{background:rgba(0,196,212,0.06);border:1px solid rgba(0,196,212,0.15);border-radius:14px;padding:12px 20px;max-width:440px;width:100%;font-size:12.5px;line-height:1.75;color:rgba(255,255,255,0.45);text-align:left;display:flex;flex-direction:column;gap:6px;}
+    .stage-why .why-label{display:inline-block;min-width:66px;font-weight:700;font-size:10px;letter-spacing:.7px;text-transform:uppercase;color:#00c4d4;margin-right:6px;}
+
+    /* Instruction key list inside overlays */
+    .key-list{font-size:14px;line-height:2;text-align:left;display:inline-block;margin:2px 0 4px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.07);border-radius:12px;padding:10px 24px;}
+    .key-list strong{background:rgba(255,255,255,0.1);border-radius:5px;padding:1px 7px;font-size:13px;margin-right:4px;}
+
+    .spinner{width:32px;height:32px;border:2.5px solid rgba(255,255,255,0.08);border-top-color:#00c4d4;border-radius:50%;animation:spin .8s linear infinite;}
     @keyframes spin{to{transform:rotate(360deg);}}
 
-    .btn{padding:9px 26px;border:none;border-radius:7px;font-size:13px;font-weight:700;cursor:pointer;transition:opacity .15s;}
-    .btn:disabled{opacity:.3;cursor:not-allowed;}
+    /* ── Buttons ── */
+    .btn{padding:10px 28px;border:none;border-radius:12px;font-size:14px;font-weight:600;cursor:pointer;transition:opacity .15s,transform .1s;}
+    .btn:hover{opacity:.88;}
+    .btn:active{transform:scale(.97);}
+    .btn:disabled{opacity:.25;cursor:not-allowed;}
     .btn-green{background:#00FF88;color:#000;}
-    .btn-blue {background:#2255FF;color:#fff;}
-    .btn-gray {background:#222;color:#aaa;border:1px solid #444;}
-    .btn-row  {display:flex;gap:10px;flex-wrap:wrap;justify-content:center;}
+    .btn-blue{background:linear-gradient(135deg,#00c4d4,#0090a0);color:#fff;}
+    .btn-gray{background:rgba(255,255,255,0.07);color:rgba(255,255,255,0.55);border:1px solid rgba(255,255,255,0.1);}
+    .btn-row{display:flex;gap:10px;flex-wrap:wrap;justify-content:center;}
 
-    #cal-card{background:#fff;border:3px solid #FFD700;border-radius:8px;display:flex;align-items:center;justify-content:center;color:#333;font-size:12px;font-weight:600;user-select:none;}
+    /* ── Calibration ── */
+    #cal-card{background:#fff;border:2px solid rgba(0,196,212,0.6);border-radius:10px;display:flex;align-items:center;justify-content:center;color:#333;font-size:12px;font-weight:600;user-select:none;}
     #cal-slider-wrap{display:flex;flex-direction:column;align-items:center;gap:8px;width:380px;}
-    #cal-slider{width:100%;accent-color:#FFD700;}
-    #cal-val{font-size:12px;color:#FFD700;}
+    #cal-slider{width:100%;accent-color:#00c4d4;}
+    #cal-val{font-size:12px;color:#00c4d4;}
 
-    #cover-bar-wrap{width:260px;height:8px;background:#222;border-radius:4px;overflow:hidden;}
+    /* ── Cover bar ── */
+    #cover-bar-wrap{width:260px;height:6px;background:rgba(255,255,255,0.08);border-radius:3px;overflow:hidden;}
     #cover-bar{height:100%;background:#00FF88;width:0%;transition:width .05s;}
 
-    /* on-canvas overlays */
-    #msg-overlay{position:absolute;bottom:60px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.70);padding:8px 22px;border-radius:8px;font-size:16px;font-weight:700;color:#fff;letter-spacing:1px;text-align:center;pointer-events:none;display:none;white-space:nowrap;}
-    #label-overlay{position:absolute;top:18px;left:50%;transform:translateX(-50%);font-size:26px;font-weight:900;color:#FFD700;text-shadow:0 0 12px #FFD700;pointer-events:none;display:none;}
-    #progress-overlay{position:absolute;top:14px;right:16px;font-size:12px;color:#555;pointer-events:none;}
-    #dist-badge{position:absolute;bottom:14px;right:14px;background:rgba(0,0,0,0.6);border:1px solid #333;border-radius:5px;padding:3px 10px;font-size:12px;color:#666;pointer-events:none;}
-    #dist-badge.ok{color:#00FF88;border-color:#00FF88;}
-    #dist-badge.warn{color:#FFD700;border-color:#FFD700;}
-    #dist-badge.err{color:#FF4444;border-color:#FF4444;}
+    /* ── On-canvas HUD ── */
+    #msg-overlay{position:absolute;bottom:60px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.65);backdrop-filter:blur(8px);padding:8px 22px;border-radius:20px;font-size:15px;font-weight:600;color:#fff;letter-spacing:.5px;text-align:center;pointer-events:none;display:none;white-space:nowrap;border:1px solid rgba(255,255,255,0.08);}
+    #label-overlay{position:absolute;top:18px;left:50%;transform:translateX(-50%);font-size:26px;font-weight:900;color:#FFD700;text-shadow:0 0 20px rgba(255,215,0,.5);pointer-events:none;display:none;}
+    #progress-overlay{position:absolute;top:14px;right:16px;font-size:11px;color:rgba(255,255,255,0.2);pointer-events:none;}
+    #dist-badge{position:absolute;bottom:14px;right:14px;background:rgba(0,0,0,0.5);backdrop-filter:blur(6px);border:1px solid rgba(255,255,255,0.1);border-radius:20px;padding:4px 12px;font-size:12px;color:rgba(255,255,255,0.3);pointer-events:none;}
+    #dist-badge.ok{color:#00FF88;border-color:rgba(0,255,136,0.3);}
+    #dist-badge.warn{color:#FFD700;border-color:rgba(255,215,0,.3);}
+    #dist-badge.err{color:#FF4444;border-color:rgba(255,68,68,.3);}
 
-    /* head-lost toast */
-    #head-toast{display:none;position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);background:rgba(20,0,0,0.92);border:2px solid #FF4444;border-radius:12px;padding:18px 32px;text-align:center;z-index:80;pointer-events:none;}
+    /* ── Head-lost toast ── */
+    #head-toast{display:none;position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);background:rgba(0,0,0,0.85);backdrop-filter:blur(12px);border:1px solid rgba(255,68,68,.4);border-radius:16px;padding:18px 32px;text-align:center;z-index:80;pointer-events:none;}
 
-    /* results */
-    #ov-results table{border-collapse:collapse;margin:6px 0;}
-    #ov-results td{padding:5px 14px;font-size:13px;}
-    #ov-results td:first-child{color:#888;text-align:right;}
-    #ov-results td:last-child{color:#fff;font-weight:700;}
-    .result-section{background:#0d0d1a;border:1px solid #223;border-radius:8px;padding:12px 16px;text-align:left;}
-    .result-section h3{font-size:11px;color:#00FF88;margin-bottom:4px;letter-spacing:1px;}
+    /* ── Results ── */
+    #ov-results table{border-collapse:collapse;margin:4px 0;width:100%;}
+    #ov-results td{padding:5px 12px;font-size:13px;}
+    #ov-results td:first-child{color:rgba(255,255,255,0.4);text-align:right;}
+    #ov-results td:last-child{color:#fff;font-weight:600;}
+    .result-section{background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:14px;padding:14px 16px;text-align:left;}
+    .result-section h3{font-size:10px;color:#00c4d4;margin-bottom:6px;letter-spacing:.8px;text-transform:uppercase;font-weight:700;}
     .eye-col{display:flex;gap:10px;flex-wrap:wrap;justify-content:center;}
 
-    /* debug panel */
-    #debug-panel{width:200px;background:#080810;border-left:1px solid #1a1a2a;padding:10px;overflow-y:auto;font-size:11px;flex-shrink:0;}
-    #debug-panel h2{color:#00FF88;font-size:11px;margin-bottom:6px;}
-    .dl{color:#555;padding:1px 0;}
+    /* ── Debug panel ── */
+    #debug-panel{width:200px;background:#0a0a10;border-left:1px solid rgba(255,255,255,0.06);padding:10px;overflow-y:auto;font-size:11px;flex-shrink:0;}
+    #debug-panel h2{color:#00c4d4;font-size:11px;margin-bottom:6px;}
+    .dl{color:rgba(255,255,255,0.25);padding:1px 0;}
     .dv{color:#ccc;font-weight:600;}
     .dv.ok{color:#00FF88;} .dv.warn{color:#FFD700;} .dv.err{color:#FF4444;}
     table.dt{width:100%;border-collapse:collapse;}
     table.dt td{padding:1px 0;vertical-align:top;}
-    table.dt td:first-child{color:#555;width:76px;}
-    hr.ds{border:none;border-top:1px solid #1a1a2a;margin:5px 0;}
-    .ds-label{font-size:10px;color:#444;text-transform:uppercase;letter-spacing:1px;margin:4px 0 2px;}
+    table.dt td:first-child{color:rgba(255,255,255,0.25);width:76px;}
+    hr.ds{border:none;border-top:1px solid rgba(255,255,255,0.06);margin:5px 0;}
+    .ds-label{font-size:10px;color:rgba(255,255,255,0.2);text-transform:uppercase;letter-spacing:1px;margin:4px 0 2px;}
 
-    /* phase-1 controls */
-    #p1-controls{position:absolute;bottom:0;left:0;right:0;background:rgba(0,0,0,0.85);border-top:1px solid #1a1a2a;padding:10px 16px;display:flex;gap:12px;align-items:center;flex-wrap:wrap;z-index:50;}
-    #p1-controls label{font-size:11px;color:#555;}
-    #p1-controls input[type=range]{width:100px;accent-color:#00FF88;}
-    #p1-controls select{background:#111;color:#ccc;border:1px solid #333;border-radius:4px;padding:2px 6px;font-size:11px;}
+    /* ── Phase-1 controls ── */
+    #p1-controls{position:absolute;bottom:0;left:0;right:0;background:rgba(0,0,0,0.75);backdrop-filter:blur(8px);border-top:1px solid rgba(255,255,255,0.06);padding:10px 16px;display:flex;gap:12px;align-items:center;flex-wrap:wrap;z-index:50;}
+    #p1-controls label{font-size:11px;color:rgba(255,255,255,0.25);}
+    #p1-controls input[type=range]{width:100px;accent-color:#00c4d4;}
+    #p1-controls select{background:#111;color:#ccc;border:1px solid rgba(255,255,255,0.1);border-radius:6px;padding:2px 6px;font-size:11px;}
     #p1-controls input[type=color]{width:36px;height:22px;border:none;border-radius:3px;cursor:pointer;}
   </style>
 </head>
 <body>
 
 <header>
-  <h1>🧠 HackAI</h1>
-  <span id="phase-badge">INIT</span>
-  <button class="btn btn-gray" id="btn-debug-toggle" style="margin-left:8px;">Debug</button>
-  <button class="btn btn-gray" id="btn-recal" style="margin-left:4px;font-size:11px;padding:3px 8px;">Recalibrate</button>
+  <div class="header-logo">
+    <div class="header-logo-mark">👁</div>
+    <span class="header-logo-text">Hack<span>AI</span></span>
+  </div>
+  <span id="phase-badge">—</span>
+
+  <button id="btn-debug-toggle" style="margin-left:4px;">Debug</button>
+  <button id="btn-recal">Recalibrate</button>
 
   <!-- Voice input button -->
   <button id="btn-mic" title="Talk to Iris"
-    style="margin-left:auto;background:#1a1a2a;border:1px solid #333;border-radius:20px;
-    color:#888;padding:4px 14px;font-size:12px;cursor:pointer;display:flex;align-items:center;gap:6px;">
+    style="margin-left:auto;background:linear-gradient(135deg,#00c4d4,#0090a0);border:none;
+    border-radius:20px;color:#fff;padding:6px 16px;font-size:12px;font-weight:600;
+    cursor:pointer;display:flex;align-items:center;gap:6px;">
     <span id="mic-icon">🎤</span>
-    <span id="mic-label">Talk to Iris</span>
+    <span id="mic-label">Iris</span>
   </button>
 
   <!-- Live transcript bubble -->
   <div id="iris-transcript" style="display:none;position:fixed;bottom:80px;right:16px;
-    max-width:300px;background:rgba(10,10,20,0.95);border:1px solid #2255FF;
-    border-radius:12px;padding:10px 14px;font-size:12px;color:#ccc;z-index:200;
-    pointer-events:none;">
-    <div style="font-size:10px;color:#2255FF;font-weight:700;margin-bottom:4px;">YOU</div>
+    max-width:300px;background:rgba(0,0,0,0.85);backdrop-filter:blur(16px);
+    border:1px solid rgba(0,196,212,0.25);border-radius:16px;padding:12px 16px;
+    font-size:12px;color:#ccc;z-index:200;pointer-events:none;">
+    <div style="font-size:10px;color:rgba(255,255,255,0.35);font-weight:600;letter-spacing:.5px;margin-bottom:4px;">YOU</div>
     <div id="iris-user-text" style="color:#fff;"></div>
-    <div id="iris-reply-wrap" style="display:none;margin-top:8px;padding-top:8px;border-top:1px solid #222;">
-      <div style="font-size:10px;color:#00FF88;font-weight:700;margin-bottom:4px;">IRIS</div>
-      <div id="iris-reply-text" style="color:#ccc;"></div>
+    <div id="iris-reply-wrap" style="display:none;margin-top:10px;padding-top:10px;border-top:1px solid rgba(255,255,255,0.08);">
+      <div style="font-size:10px;color:#00c4d4;font-weight:700;letter-spacing:.5px;margin-bottom:4px;">IRIS</div>
+      <div id="iris-reply-text" style="color:rgba(255,255,255,0.7);"></div>
     </div>
   </div>
 </header>
@@ -132,11 +157,11 @@
     <button id="btn-mdsf-no"
       style="pointer-events:all;padding:18px 44px;font-size:18px;font-weight:800;
       background:rgba(0,0,0,0.6);border:2px solid rgba(255,255,255,0.35);
-      border-radius:40px;color:#fff;cursor:pointer;">No, I can't</button>
+      border-radius:40px;color:#fff;cursor:pointer;">No</button>
     <button id="btn-mdsf-yes"
       style="pointer-events:all;padding:18px 44px;font-size:18px;font-weight:800;
       background:#0055CC;border:2px solid #0088FF;
-      border-radius:40px;color:#fff;cursor:pointer;">Yes, I can</button>
+      border-radius:40px;color:#fff;cursor:pointer;">Yes</button>
   </div>
 
   <!-- head-lost toast -->
@@ -148,7 +173,7 @@
 
   <!-- ═══ OVERLAY: Cover lost (shown mid-test if eye becomes uncovered) ═══ -->
   <div class="ov hidden" id="ov-cover-lost" style="z-index:90;">
-    <h2 style="color:#FF8800;">👁 Cover Your Eye</h2>
+    <h2>Eye <span class="accent" style="color:#FF8800;">Uncovered</span></h2>
     <p>Your <strong id="cover-lost-eye">RIGHT</strong> eye became uncovered.<br>
        The test is paused. Cover it again to continue from where you left off.</p>
     <div style="position:relative;display:inline-block;margin:8px 0;">
@@ -171,7 +196,11 @@
 
   <!-- ═══ OVERLAY: Display calibration ═══ -->
   <div class="ov" id="ov-display-cal">
-    <h2>Display Calibration</h2>
+    <h2>Display <span class="accent">Calibration</span></h2>
+    <div class="stage-why">
+      <div><span class="why-label">Measures</span> Physical pixel size of your screen</div>
+      <div><span class="why-label">Why</span> All grating sizes are calculated in real millimetres — without this, distances and prescriptions would be wrong</div>
+    </div>
     <p>Drag the slider until the white card below matches the size of a real credit card (85.6 × 54 mm).</p>
     <div id="cal-slider-wrap">
       <div id="cal-card" style="width:300px;height:189px;">Credit card size</div>
@@ -194,9 +223,12 @@
 
   <!-- ═══ OVERLAY: Monocular setup ═══ -->
   <div class="ov hidden" id="ov-monocular">
-    <h2>Cover One Eye</h2>
-    <p>Cover your <strong id="mono-eye-name">RIGHT</strong> eye firmly with your hand and hold it there.<br>
-       Keep it covered for the entire test.</p>
+    <h2>Cover <span class="accent">One Eye</span></h2>
+    <div class="stage-why">
+      <div><span class="why-label">Measures</span> Each eye independently</div>
+      <div><span class="why-label">Why</span> Each eye has its own prescription — testing both at once would mix their signals and give inaccurate results</div>
+    </div>
+    <p>Cover your <strong id="mono-eye-name">RIGHT</strong> eye with your palm and hold it there.</p>
     <!-- Live webcam preview -->
     <div style="position:relative;display:inline-block;margin:8px 0;">
       <canvas id="mono-preview" width="280" height="210"
@@ -208,7 +240,7 @@
     </div>
     <div id="cover-status" style="font-size:20px;font-weight:800;color:#FFD700;">—</div>
     <div id="cover-bar-wrap"><div id="cover-bar"></div></div>
-    <p class="note">Hold cover steady until the bar fills…</p>
+    <p class="note">Hold until the bar fills</p>
     <div style="font-size:11px;color:#444;text-align:center;">
       Hand: <span id="mono-hand">—</span> &nbsp;|&nbsp; EAR: <span id="mono-ear">—</span>
     </div>
@@ -220,10 +252,12 @@
 
   <!-- ═══ OVERLAY: Axis-check positioning (Stage 2) ═══ -->
   <div class="ov hidden" id="ov-axis-pos">
-    <h2>Step 2 — Confirm Your Position</h2>
-    <p>Sit at a comfortable distance from the screen — roughly <strong>arm's length (~30–40 cm)</strong>.</p>
-    <p>A blue letter will appear. It should look <strong>sharp and clearly readable</strong>.<br>
-       <em>This step is just to record your testing distance — no need to move.</em></p>
+    <h2>Confirm <span class="accent">Position</span></h2>
+    <div class="stage-why">
+      <div><span class="why-label">Measures</span> Your exact distance from the screen</div>
+      <div><span class="why-label">Why</span> All grating angles are calculated in degrees of visual angle — your distance must be locked in so the math stays accurate throughout the test</div>
+    </div>
+    <p>Sit at arm's length. A blue letter will appear — it should look clear.</p>
     <div class="btn-row">
       <button class="btn btn-blue" id="btn-axpos-start">Show letter →</button>
     </div>
@@ -233,56 +267,52 @@
     transform:translateX(-50%);z-index:55;text-align:center;
     background:rgba(0,0,0,0.75);border:1px solid #333;border-radius:12px;padding:12px 28px;">
     <div id="axpos-dist" style="font-size:22px;font-weight:900;color:#00FF88;">— cm</div>
-    <div style="color:#aaa;font-size:12px;margin-top:3px;">Can you see the letter clearly?</div>
-    <button class="btn btn-blue" id="btn-axpos-cont" style="font-size:17px;padding:12px 36px;margin-top:10px;">Yes, continue →</button>
+    <button class="btn btn-blue" id="btn-axpos-cont" style="font-size:17px;padding:12px 36px;margin-top:10px;">Looks clear →</button>
   </div>
 
   <!-- ═══ OVERLAY: Axis intro ═══ -->
   <div class="ov hidden" id="ov-axis-intro">
-    <h2>Step 3 — Find Astigmatic Axis</h2>
-    <p>Two blue circles will appear on screen <strong>at the same time</strong> — one on top, one below.<br>
-       Each circle contains <strong>striped lines</strong> at a slightly different angle.</p>
-    <p>Choose which circle's lines look <strong>sharper or clearer</strong> to you:</p>
-    <div style="font-size:15px;line-height:1.9;text-align:left;display:inline-block;margin:4px 0 8px;">
-      <span style="color:#0af;">●</span> Press <strong>1</strong> — Upper circle looks clearer<br>
-      <span style="color:#0af;">●</span> Press <strong>2</strong> — Lower circle looks clearer<br>
-      <span style="color:#888;">●</span> Press <strong>3</strong> — Both look the same
+    <h2>Find <span class="accent">Astigmatic Axis</span></h2>
+    <div class="stage-why">
+      <div><span class="why-label">Measures</span> The angle (axis) at which your eye focuses least clearly</div>
+      <div><span class="why-label">Why</span> Astigmatism means your eye focuses lines in one direction more sharply than another — finding this axis determines the CYL and AXIS values in your prescription</div>
     </div>
-    <p>There are no right or wrong answers — trust your first instinct.</p>
+    <p>Two circles appear — pick which looks clearer.</p>
+    <div class="key-list">
+      <strong>1</strong> Upper &nbsp; <strong>2</strong> Lower &nbsp; <strong>3</strong> Same
+    </div>
     <div class="btn-row">
       <button class="btn btn-green" id="btn-axis-start">Begin →</button>
     </div>
-    <p class="note">~6 comparisons · Head still · Circles use blue tripole lines</p>
+    <p class="note">~6 comparisons · trust your first instinct</p>
   </div>
 
   <!-- ═══ OVERLAY: MDSF intro ═══ -->
   <div class="ov hidden" id="ov-mdsf-intro">
-    <h2>Step 4 — Can You See the Lines?</h2>
-    <p>A circle full of fine diagonal lines will appear in the centre of the screen.</p>
-    <p>Your only job is to answer <strong>one simple question</strong> each trial:</p>
-    <div style="font-size:16px;line-height:2;text-align:left;display:inline-block;margin:4px 0 10px;background:rgba(255,255,255,0.06);border-radius:10px;padding:10px 24px;">
-      <span style="color:#0af;">●</span> <strong>Yes, I can</strong> — you can see lines in the circle clearly<br>
-      <span style="color:#888;">●</span> <strong>No, I can't</strong> — lines look blurry or you can't see them
+    <h2>Resolution <span class="accent">Threshold</span></h2>
+    <div class="stage-why">
+      <div><span class="why-label">Measures</span> The finest stripe pattern your eye can detect (in cycles per degree)</div>
+      <div><span class="why-label">Why</span> This spatial frequency threshold converts directly into diopters of defocus — it tells us how strong your lens correction needs to be along each meridian</div>
     </div>
-    <p>The lines will get finer or coarser based on your answers.<br>
-       <strong>~10 trials total</strong> — trust your first impression.</p>
+    <p>A striped circle flashes. Can you see the lines?</p>
+    <div class="key-list">
+      <strong>Yes</strong> I can see them &nbsp;&nbsp; <strong>No</strong> I can't
+    </div>
     <div class="btn-row">
       <button class="btn btn-green" id="btn-mdsf-start">Begin →</button>
     </div>
-    <p class="note">Keyboard shortcuts: Y = Yes · N = No · Keep your covered eye covered</p>
+    <p class="note">~10 trials · Y / N keys</p>
   </div>
 
   <!-- ═══ OVERLAY: Far-point instructions (shown before grating appears) ═══ -->
   <div class="ov hidden" id="ov-farpoint">
-    <h2 id="fp-title">Step 5 — Far Point (Meridian 1)</h2>
-    <p>After tapping <strong>Start</strong>, a circle of lines will appear on screen.</p>
-    <ol style="text-align:left;line-height:2;font-size:15px;margin:6px 0 10px;padding-left:20px;">
-      <li>Start <strong>close to the screen</strong> — lines should look clear</li>
-      <li>Slowly <strong>lean back</strong> until the lines <strong>blur or disappear</strong></li>
-      <li>When they're just barely blurry — tap <strong>Lock in position</strong></li>
-    </ol>
+    <h2 id="fp-title">Far Point — <span class="accent">Meridian 1</span></h2>
+    <div class="stage-why">
+      <div><span class="why-label">Measures</span> The farthest distance your eye can still focus clearly</div>
+      <div><span class="why-label">Why</span> Your far point distance converts to diopters (P = −1000 ÷ cm) — this gives the sphere power of your prescription; measuring two meridians captures any astigmatism</div>
+    </div>
+    <p>Move close → lean back until lines blur → lock in.</p>
     <div id="fp-cpd" style="font-size:13px;color:#66aaff;margin-bottom:6px;">— CPD grating</div>
-    <p class="note">Keep your <span id="fp-eye">right</span> eye covered throughout.</p>
     <div class="btn-row" style="margin-top:14px;">
       <button class="btn btn-blue" id="btn-fp-start">Start →</button>
     </div>
@@ -292,24 +322,21 @@
   <div id="fp-float" style="display:none;position:absolute;bottom:20px;left:50%;
     transform:translateX(-50%);z-index:55;text-align:center;
     background:rgba(0,0,0,0.78);border:1px solid #333;border-radius:14px;padding:14px 28px;">
-    <div id="fp-face-badge" style="font-size:11px;margin-bottom:4px;color:#555;">● camera tracking</div>
     <div id="fp-dist" style="font-size:30px;font-weight:900;color:#00FF88;letter-spacing:2px;">— cm</div>
-    <div id="fp-status" style="font-size:13px;color:#aaa;margin-top:2px;">Slowly lean back…</div>
-    <div id="fp-hold-wrap" style="width:220px;height:6px;background:#222;border-radius:3px;
+    <div id="fp-status" style="font-size:12px;color:#aaa;margin-top:2px;">Lean back…</div>
+    <div id="fp-hold-wrap" style="width:180px;height:5px;background:#222;border-radius:3px;
       overflow:hidden;margin:8px auto 0;">
       <div id="fp-hold-bar" style="height:100%;background:#00FF88;width:0%;transition:width .05s;"></div>
     </div>
-    <div id="fp-hold-label" style="font-size:11px;color:#555;margin-top:3px;">Hold still to auto-capture…</div>
-    <div style="display:flex;gap:14px;margin-top:12px;justify-content:center;">
-      <button class="btn btn-gray"  id="btn-fp-skip"  style="padding:10px 20px;font-size:14px;">Skip</button>
-      <button class="btn btn-green" id="btn-fp-lock"  style="padding:10px 26px;font-size:15px;font-weight:800;">🔒 Lock in position</button>
+    <div style="display:flex;gap:10px;margin-top:10px;justify-content:center;">
+      <button class="btn btn-gray"  id="btn-fp-skip" style="padding:8px 16px;font-size:13px;">Skip</button>
+      <button class="btn btn-green" id="btn-fp-lock" style="padding:8px 20px;font-size:14px;font-weight:800;">Lock in</button>
     </div>
-    <div style="font-size:11px;color:#555;margin-top:6px;">or press <strong>Enter</strong> to lock in</div>
   </div>
 
   <!-- ═══ OVERLAY: Results ═══ -->
   <div class="ov hidden" id="ov-results">
-    <h2 id="r-title">Screening Results</h2>
+    <h2 id="r-title">Screening <span class="accent">Results</span></h2>
 
     <!-- Current eye -->
     <div class="eye-col" id="r-cur-block">
@@ -675,7 +702,7 @@ D('btn-cal-skip').onclick = () => {
 D('btn-recal').onclick = () => {
   calibrator.clear(); stopCamera();
   showOv('ov-display-cal'); setState('DISPLAY_CAL');
-  irisSpeak("Welcome back! Let's recalibrate your display. You'll see a white rectangle on screen. Use the slider to resize it until it matches the exact width and height of a credit card. This ensures accurate measurements.");
+  irisSpeak("Resize the rectangle to match a credit card, then hit Continue.");
 };
 function updateDebugCal() {
   setDv('d-mmpx', calibrator.mmPerPx?.toFixed(4) ?? '—');
@@ -686,7 +713,7 @@ function updateDebugCal() {
 async function startLoading() {
   if (stream) return; // already started
   showOv('ov-loading'); setState('LOADING');
-  irisSpeak("Great! Now I'm turning on your webcam and loading the vision models. Please make sure you're in a well-lit area with your face clearly visible. This should only take a few seconds.");
+  irisSpeak("Loading — make sure your face is well-lit.");
   D('loading-msg').textContent = 'Requesting camera…';
   try {
     stream = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480, facingMode: 'user' }, audio: false });
@@ -768,10 +795,7 @@ function goToMonocularSetup() {
   setState('MONOCULAR_SETUP');
   const eyeLabel = currentEye === 'right' ? 'right' : 'left';
   const otherEye = currentEye === 'right' ? 'left' : 'right';
-  irisSpeak(
-    `Phase one: monocular setup. Cover your ${eyeLabel} eye with your palm and keep your ${otherEye} eye open and looking at the screen. ` +
-    `Hold your hand flat so the camera can detect it. The progress bar will fill once the cover is confirmed. Keep it covered until I tell you we're ready.`
-  );
+  irisSpeak(`Cover your ${eyeLabel} eye with your palm and hold it there.`);
   enforcer.reset();
   showLabel(''); showMsg(''); setProgress('');
 
@@ -889,8 +913,8 @@ function goToMonocularSetup() {
         : `⚠ ${luxValue} lx — too bright, reduce glare`;
       D('cover-status').style.color = '#FFB300';
       irisSpeak(lightStatus === 'dark'
-        ? `Warning: only ${luxValue} lux detected. Please increase room lighting before continuing.`
-        : `Warning: ${luxValue} lux is very bright. Try reducing screen brightness or moving away from glare.`
+        ? `Too dark — add more light.`
+        : `Too bright — reduce glare.`
       );
     }
 
@@ -908,10 +932,7 @@ function beginAxisCheckPos() {
   D('axpos-float').style.display = 'none';
   showOv('ov-axis-pos');
   setState('AXIS_CHECK_POS');
-  irisSpeak(
-    "Step 2. Sit at arm's length from the screen — about 30 to 40 centimetres. " +
-    "A blue letter will appear. If you can read it clearly, tap Continue to lock in your position."
-  );
+  irisSpeak("Sit at arm's length. If the letter looks clear, tap Continue.");
 }
 
 // "Show letter" — dismiss the dark overlay so the canvas letter is visible
@@ -935,24 +956,19 @@ function beginAxisSearch() {
   axisStep   = 0;
   hideAllOv(); showOv('ov-axis-intro');
   setState('AXIS_INTRO');
-  irisSpeak(
-    "Phase two: axis search. You'll see two circles appear on screen at the same time — one on top and one below. " +
-    "Each circle contains a striped pattern. Your job is to decide which circle looks clearer. " +
-    "Press 1 for Upper, press 2 for Lower, or press 3 if they look the same. " +
-    "There will be about six comparisons. Trust your first instinct and answer quickly. When you're ready, click the start button."
-  );
+  irisSpeak("Two circles — pick which looks clearer. Press 1, 2, or 3.");
 }
 D('btn-axis-start').onclick = () => {
   hideAllOv(); setState('AXIS');
   stimStateT = performance.now();
   showLabel(''); showMsg(''); setProgress('');
-  irisSpeak("Here we go. Two circles will appear. Press 1 for Upper, 2 for Lower, or 3 if they look the same.");
+  irisSpeak("Go.");
 };
 function startNextAxisPair() {
   axisPair   = axisEngine.nextPair();
   axisStep   = 1;
   stimStateT = performance.now();
-  showLabel('GET READY', '#888'); showMsg('');
+  showLabel(''); showMsg('');
   const p = axisEngine.getProgress();
   setProgress(`${p.done + 1} / 6`);
   setDv('d-ax-pair', `${axisPair[0]}° vs ${axisPair[1]}°`);
@@ -971,12 +987,7 @@ function beginMDSF() {
   });
   showOv('ov-mdsf-intro');
   setState('MDSF_INTRO');
-  irisSpeak(
-    "Great work on the axis test! Now phase three: the resolution staircase. " +
-    "A blue striped pattern will flash briefly on either the left or the right side of the screen. " +
-    "Press the left arrow key if you saw it on the left, or the right arrow key if you saw it on the right. " +
-    "The pattern will gradually get finer and harder to see — that's normal and expected. Do your best and don't worry if you're unsure. There are ten trials total."
-  );
+  irisSpeak("A pattern flashes left or right — press the matching arrow key.");
 }
 D('btn-mdsf-start').onclick = () => {
   hideAllOv();
@@ -989,7 +1000,7 @@ function startMDSFTrial() {
   stimStateT = performance.now();
   D('mdsf-btns').style.display = 'none';
   showLabel(''); showMsg('');
-  setProgress(`Trial: ${interleavedSC.totalTrials + 1} / ${interleavedSC.maxTrialsVal}`);
+  setProgress(`${interleavedSC.totalTrials + 1} / ${interleavedSC.maxTrialsVal}`);
 }
 
 // ─── Far-point walk-back (hold-capture) ───────────────────────────────────────
@@ -999,7 +1010,7 @@ function beginFarPoint(num) {
   const axisAngle = num === 1 ? (foundAxis ?? 0) : ((foundAxis ?? 0) + 90) % 180;
   const thr = interleavedSC ? interleavedSC.threshold(num - 1) : 3;
   fpTargetCPD = Math.max(1, thr * 0.65);
-  D('fp-title').textContent = `Step 5 — Far Point (Meridian ${num}: ${axisAngle}°)`;
+  D('fp-title').innerHTML = `Far Point — <span class="accent">Meridian ${num}</span> <span style="font-size:14px;color:rgba(255,255,255,0.3);font-weight:400;">${axisAngle}°</span>`;
   D('fp-eye').textContent   = currentEye;
   D('fp-cpd').textContent   = `${fpTargetCPD.toFixed(1)} CPD grating`;
   D('fp-dist').textContent  = '— cm';
@@ -1008,15 +1019,9 @@ function beginFarPoint(num) {
   showOv('ov-farpoint');       // show instructions — grating NOT visible yet
   showLabel(''); showMsg('');
   if (num === 1) {
-    irisSpeak(
-      "Step 5: far-point measurement. Read the instructions, then tap Start. " +
-      "Move close to the screen first, then slowly lean back until the lines blur. " +
-      "When they're just barely blurry, tap Lock in position or press Enter."
-    );
+    irisSpeak("Move close, then lean back until the lines just blur — then lock in.");
   } else {
-    irisSpeak(
-      "One more measurement for the second meridian. Same thing — start close, lean back until lines blur, then lock in your position."
-    );
+    irisSpeak("Same again for the second meridian.");
   }
 }
 
@@ -1028,7 +1033,7 @@ D('btn-fp-start').onclick = () => {
   if (fpMeridian === 1) holdCapture1 = new HoldCapture(FP_HOLD_MS);
   else                  holdCapture2 = new HoldCapture(FP_HOLD_MS);
   setState(fpMeridian === 1 ? 'FAR_POINT_1' : 'FAR_POINT_2');
-  irisSpeak("Start close, then slowly lean back. Tap Lock in position when lines are just blurry.");
+  irisSpeak("Start close, lean back until lines blur, then lock in.");
 };
 
 D('btn-fp-lock').onclick = () => {
@@ -1043,10 +1048,10 @@ function autoCaptureFarPoint(mm) {
   if (fpColorMode === 'BLUE') {
     if (fpMeridian === 1) {
       fp1ResultBlueMm = mm;
-      showLabel(`FP1-Blue: ${cm} cm`, '#44AAFF');
+      showLabel('');
     } else {
       fp2ResultBlueMm = mm;
-      showLabel(`FP2-Blue: ${cm} cm`, '#44AAFF');
+      showLabel('');
     }
     fpColorMode = 'RED'; // reset for next stage
     const doneState = fpMeridian === 1 ? 'FAR_POINT_1_DONE' : 'FAR_POINT_2_DONE';
@@ -1062,7 +1067,7 @@ function autoCaptureFarPoint(mm) {
   // RED capture — primary measurement
   if (fpMeridian === 1) {
     fp1ResultMm = mm;
-    showLabel(`FP1-Red: ${cm} cm`, '#FF6644');
+    showLabel('');
     setState('FAR_POINT_1_DONE');
     setTimeout(() => {
       showLabel('');
@@ -1075,7 +1080,7 @@ function autoCaptureFarPoint(mm) {
     }, 1800);
   } else {
     fp2ResultMm = mm;
-    showLabel(`FP2-Red: ${cm} cm`, '#FF6644');
+    showLabel('');
     setState('FAR_POINT_2_DONE');
     setTimeout(() => {
       showLabel('');
@@ -1132,11 +1137,10 @@ document.addEventListener('keydown', e => {
       foundAxis = axisEngine.getFinalAxis();
       axisConf  = axisEngine.getAxisConfidence();
       renderer.drawFixation();
-      showLabel(`AXIS: ${foundAxis}°`, '#00FF88');
-      showMsg('Axis found! Starting resolution test…', 2000);
+      showLabel(''); showMsg('');
       setProgress('');
       setState('AXIS_DONE');
-      setTimeout(() => beginMDSF(), 2200);
+      setTimeout(() => beginMDSF(), 800);
     } else {
       axisStep = 0; // queue next pair
     }
@@ -1161,12 +1165,7 @@ document.addEventListener('keydown', e => {
 // ─── Results ──────────────────────────────────────────────────────────────────
 function showResults() {
   setState('RESULTS');
-  irisSpeak(
-    "Your screening for this eye is complete! Iris has estimated your prescription based on the test. " +
-    "These are estimates only and are not a medical diagnosis. " +
-    "You can now test your other eye, or view your full report. " +
-    "Remember to consult a licensed eye care professional to confirm any findings."
-  );
+  irisSpeak("Done. See your results below — these are estimates, not a diagnosis.");
   const t1 = interleavedSC?.threshold(0) ?? 0;
   const t2 = interleavedSC?.threshold(1) ?? 0;
   const s1 = interleavedSC?.spread(0)    ?? 0;
@@ -1237,7 +1236,7 @@ function showResults() {
   // Populate current-eye columns
   const eyeName = testedEye.charAt(0).toUpperCase() + testedEye.slice(1);
   const confLabel = axisConf >= 1.0 ? 'High' : axisConf >= 0.5 ? 'Medium' : 'Low';
-  D('r-title').textContent      = `Results — ${eyeName} Eye`;
+  D('r-title').innerHTML        = `${eyeName} Eye — <span class="accent">Results</span>`;
   D('r-eye-label').textContent  = `${eyeName.toUpperCase()} EYE`;
   D('r-axis').textContent       = `${foundAxis ?? '?'}°`;
   D('r-axis-conf').textContent  = `${confLabel} (${axisConf >= 1.0 ? '3/3' : axisConf >= 0.5 ? '2/3' : '1/3'} wins)`;
@@ -1291,7 +1290,7 @@ function showResults() {
     D('r-prev-sph').textContent       = pr ? `${pr.sph.toFixed(2)} D` : 'skipped';
     D('r-prev-cyl').textContent       = pr ? `${pr.cyl.toFixed(2)} D` : 'skipped';
     D('r-prev-raxis').textContent     = pr ? `${pr.axis}°` : '—';
-    D('r-title').textContent          = 'Results — Both Eyes';
+    D('r-title').innerHTML            = `Both Eyes — <span class="accent">Results</span>`;
     D('btn-other-eye').textContent    = '✓ Done — Restart';
   } else {
     D('r-prev-block').style.display   = 'none';
@@ -1299,11 +1298,7 @@ function showResults() {
     D('btn-other-eye').textContent    = `Test ${otherName} Eye →`;
   }
 
-  const diff  = Math.abs(t1 - t2);
-  const mNote = diff > 1.5
-    ? `⚠ ${diff.toFixed(1)} CPD difference between meridians — possible astigmatism.`
-    : `MDSF difference: ${diff.toFixed(1)} CPD (within normal range).`;
-  showMsg(mNote);
+  showMsg('');
   showOv('ov-results');
 }
 
@@ -1352,7 +1347,7 @@ function enterCoverLost() {
   coverLostEnforcer.reset();
   showOv('ov-cover-lost');
   setState('COVER_LOST');
-  irisSpeak(`Test paused. Please cover your ${currentEye} eye to continue.`);
+  irisSpeak(`Cover your ${currentEye} eye to resume.`);
 }
 
 function exitCoverLost() {
@@ -1387,7 +1382,7 @@ function exitCoverLost() {
   }
 
   hideAllOv();
-  irisSpeak('Eye covered. Continuing the test.');
+  irisSpeak('Resuming.');
 }
 
 D('btn-other-eye').onclick = () => {
@@ -1397,10 +1392,10 @@ D('btn-other-eye').onclick = () => {
     // Both eyes done — full restart
     currentEye = 'right';
     Object.keys(eyeResultsMap).forEach(k => delete eyeResultsMap[k]);
-    irisSpeak("Let's start over from the beginning for a fresh test.");
+    irisSpeak("Starting over.");
   } else {
     currentEye = currentEye === 'right' ? 'left' : 'right';
-    irisSpeak(`Great work! Now let's test your ${currentEye} eye. Switch which hand covers your eye so the other eye is now blocked.`);
+    irisSpeak(`Now cover your ${currentEye} eye.`);
   }
   resetEyeState();
   goToMonocularSetup();
@@ -1721,7 +1716,6 @@ function renderLoop(ts) {
     } else if (axisStep === 1) {
       // "GET READY" pause — long enough that user can settle before circles appear
       renderer.drawFixation();
-      showLabel(elapsed < 800 ? 'GET READY…' : 'LOOK AT THE DOT', '#555');
       if (elapsed > AXIS_READY_MS) { axisStep = 2; stimStateT = now; showLabel(''); }
     } else if (axisStep === 2) {
       // Show both circles simultaneously — user picks Upper (1), Lower (2), or Same (3)
@@ -1754,13 +1748,6 @@ function renderLoop(ts) {
       ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H);
       renderer.drawCircleGrating({ angleDeg: trialAxis, cpd: trialCPD, distMm, mmPerPx, color: STIM_BLUE, fixationDot: true });
 
-      // "Can you see the lines?" drawn on canvas
-      ctx.font = `bold ${Math.max(16, Math.min(W, H) * 0.05)}px sans-serif`;
-      ctx.textAlign    = 'center';
-      ctx.textBaseline = 'top';
-      ctx.fillStyle    = '#fff';
-      ctx.fillText('Can you see the lines?', W / 2, 10);
-
       // Meridian indicator (small, bottom-right)
       ctx.font = '11px sans-serif'; ctx.textAlign = 'right'; ctx.textBaseline = 'bottom';
       ctx.fillStyle = '#444';
@@ -1781,10 +1768,10 @@ function renderLoop(ts) {
       if (elapsed > MDSF_FB_MS) {
         showLabel('');
         if (interleavedSC.isDone()) {
-          const t0 = interleavedSC.threshold(0), t1 = interleavedSC.threshold(1);
-          showLabel(`${t0.toFixed(1)} / ${t1.toFixed(1)} CPD`, '#00FF88');
+          showLabel('');
+          stimState = 'IDLE';
           setState('MDSF_DONE');
-          setTimeout(() => { showLabel(''); beginFarPoint(1); }, 2000);
+          setTimeout(() => { beginFarPoint(1); }, 400);
         } else {
           startMDSFTrial();
         }
@@ -1993,10 +1980,9 @@ function updateFPS(now) {
           foundAxis = axisEngine.getFinalAxis();
           axisConf  = axisEngine.getAxisConfidence();
           renderer.drawFixation();
-          showLabel(`AXIS: ${foundAxis}°`, '#00FF88');
-          showMsg('Axis found! Starting resolution test…', 2000);
+          showLabel(''); showMsg('');
           setProgress(''); setState('AXIS_DONE');
-          setTimeout(() => beginMDSF(), 2200);
+          setTimeout(() => beginMDSF(), 800);
         } else {
           axisStep = 0;
         }
@@ -2127,12 +2113,7 @@ if (calibrator.isCalibrated()) {
 } else {
   showOv('ov-display-cal');
   // Greet and explain first step
-  irisSpeak(
-    "Hello! Welcome to HackAI. Let's start by calibrating your display. " +
-    "You'll see a white rectangle on screen. Use the slider below it to resize the rectangle " +
-    "until it matches the exact width and height of a standard credit card. " +
-    "This step ensures all measurements are accurate. When it matches, click Continue."
-  );
+  irisSpeak("Resize the rectangle to match a credit card, then hit Continue.");
 }
 </script>
 </body>

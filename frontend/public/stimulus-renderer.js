@@ -169,27 +169,14 @@ export class StimulusRenderer {
       ctx.beginPath(); ctx.arc(W/2, cy, fd, 0, Math.PI*2); ctx.fill();
     }
 
-    // "Upper" / "Lower" labels above each circle
-    const lblPx = Math.max(13, R * 0.14);
-    ctx.font         = `bold ${lblPx}px sans-serif`;
-    ctx.textAlign    = 'center';
-    ctx.fillStyle    = 'rgba(255,255,255,0.70)';
-    ctx.textBaseline = 'bottom';
-    ctx.fillText('Upper', W/2, cy1 - R - 4);
-    ctx.fillText('Lower', W/2, cy2 - R - 4);
-
-    // Question at the very top
-    const qPx = Math.max(16, R * 0.18);
-    ctx.font         = `bold ${qPx}px sans-serif`;
-    ctx.textBaseline = 'top';
-    ctx.fillStyle    = '#ffffff';
-    ctx.fillText('Which lines are clearer?', W/2, 8);
-
-    // Response hint at the very bottom
-    ctx.font         = `${Math.max(13, qPx * 0.75)}px sans-serif`;
-    ctx.textBaseline = 'bottom';
-    ctx.fillStyle    = 'rgba(255,255,255,0.55)';
-    ctx.fillText('Press  1 = Upper  ·  2 = Lower  ·  3 = Same', W/2, H - 8);
+    // Minimal labels: just tiny 1/2 markers beside each circle
+    const lblPx = Math.max(11, R * 0.11);
+    ctx.font         = `600 ${lblPx}px sans-serif`;
+    ctx.textAlign    = 'right';
+    ctx.fillStyle    = 'rgba(255,255,255,0.25)';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('1', W/2 - R - 8, cy1);
+    ctx.fillText('2', W/2 - R - 8, cy2);
   }
 
   // ── Draw blank fixation screen ─────────────────────────────────────────────
@@ -216,13 +203,7 @@ export class StimulusRenderer {
     ctx.fillStyle = '#000';
     ctx.fillRect(0, 0, W, H);
 
-    // ── "Slowly move away" — always at the top ────────────────────────────────
-    const lblPx = Math.max(16, Math.min(W, H) * 0.045);
-    ctx.font         = `bold ${lblPx}px sans-serif`;
-    ctx.textAlign    = 'center';
-    ctx.textBaseline = 'top';
-    ctx.fillStyle    = '#ffffff';
-    ctx.fillText('Sit at arm\'s length — letter should look clear', W / 2, 12);
+    // No on-canvas instruction text — overlay handles guidance
 
     // ── Build letter inside circle via OffscreenCanvas ────────────────────────
     const off  = new OffscreenCanvas(W, H);
@@ -269,12 +250,7 @@ export class StimulusRenderer {
 
     ctx.drawImage(off, 0, 0);
 
-    // Sub-instruction below the circle
-    ctx.font         = `${Math.max(12, lblPx * 0.75)}px sans-serif`;
-    ctx.textAlign    = 'center';
-    ctx.textBaseline = 'top';
-    ctx.fillStyle    = 'rgba(255,255,255,0.55)';
-    ctx.fillText("If the letter looks clear → tap Yes, continue", W / 2, cy + R + 10);
+    // Sub-instruction removed — floating panel handles this
   }
 
   // ── Full-screen grating (square-wave or tripole) — legacy stages ───────────
