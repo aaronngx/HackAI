@@ -1,16 +1,50 @@
 "use client";
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import AppointmentReceipt from "./AppointmentReceipt.jsx";
 
-const C = {
-  cream: "#f5f2ee",
-  brand: "#00c4d4",
-};
+const DEFAULT_TIME_SLOTS = ["9:00 AM", "10:00 AM", "11:00 AM", "12:00 PM", "2:00 PM", "3:00 PM", "4:00 PM"];
+const NEXT_DAYS = 14;
 
-/** Open clinic website, or Google search to find and book. */
-function getBookUrl(clinic) {
-  if (clinic.website) return clinic.website;
-  return clinic.googleSearchUrl || `https://www.google.com/search?q=${encodeURIComponent(clinic.name + " " + (clinic.address || "") + " eye clinic book")}`;
+/** Parse hours string like "Mon–Fri: 9am – 5pm" and return time slots (e.g. 9:00 AM, 9:30 AM, ... 4:30 PM) */
+function getTimeSlotsFromHours(hoursStr) {
+  if (!hoursStr || typeof hoursStr !== "string") return DEFAULT_TIME_SLOTS;
+  const match = hoursStr.match(/(\d{1,2})\s*:?\s*(\d{2})?\s*(am|pm|AM|PM)/gi);
+  if (!match || match.length < 2) return DEFAULT_TIME_SLOTS;
+  const start = match[0].trim();
+  const end = match[1].trim();
+  const parse = (s) => {
+    const m = s.match(/(\d{1,2})(?:\s*:\s*(\d{2}))?\s*(am|pm)/i);
+    if (!m) return null;
+    let h = parseInt(m[1], 10);
+    const min = m[2] ? parseInt(m[2], 10) : 0;
+    if (/pm/i.test(m[3]) && h < 12) h += 12;
+    if (/am/i.test(m[3]) && h === 12) h = 0;
+    return h * 60 + min;
+  };
+  const startMin = parse(start);
+  const endMin = parse(end);
+  if (startMin == null || endMin == null || endMin <= startMin) return DEFAULT_TIME_SLOTS;
+  const slots = [];
+  for (let m = startMin; m < endMin; m += 30) {
+    const h = Math.floor(m / 60) % 24;
+    const min = m % 60;
+    const am = h < 12;
+    const h12 = h === 0 ? 12 : h > 12 ? h - 12 : h;
+    slots.push(`${h12}:${min.toString().padStart(2, "0")} ${am ? "AM" : "PM"}`);
+  }
+  return slots.length > 0 ? slots : DEFAULT_TIME_SLOTS;
+}
+
+function getDateOptions() {
+  const out = [];
+  const today = new Date();
+  for (let i = 0; i < NEXT_DAYS; i++) {
+    const d = new Date(today);
+    d.setDate(today.getDate() + i);
+    out.push(d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", year: "numeric" }));
+  }
+  return out;
 }
 
 function StarRating({ rating, count, size = 14, color = "#111" }) {
@@ -26,23 +60,38 @@ function StarRating({ rating, count, size = 14, color = "#111" }) {
   );
 }
 
-function ClinicDetailCard({ clinic, onClose, onShowMap }) {
-  const [yelpUrl, setYelpUrl] = useState(clinic.yelpUrl);
-  const hours = clinic.hours ?? "Mon–Fri: 9am – 5pm";
-  const insurance = clinic.insurance ?? "Medicare, Blue Cross, Aetna";
-  const languages = clinic.languages ?? "English, Spanish";
-  const bookUrl = getBookUrl(clinic);
-  const hasReviewLinks = clinic.googleMapsUrl || yelpUrl;
+function DoctorDetailCard({ doctor, onClose, onShowMap }) {
+  const [step, setStep] = useState("detail"); // 'detail' | 'booking' | 'receipt'
+  const [bookingDate, setBookingDate] = useState("");
+  const [bookingTime, setBookingTime] = useState("");
+  const [appointment, setAppointment] = useState(null);
+  const dateOptions = useRef(getDateOptions()).current;
 
-  useEffect(() => {
-    if (!clinic.yelpUrl) return;
-    fetch(`/api/yelp?name=${encodeURIComponent(clinic.name)}&location=${encodeURIComponent(clinic.address || "")}`)
-      .then((r) => r.json())
-      .then((data) => {
-        if (data?.url && data.source === "direct") setYelpUrl(data.url);
-      })
-      .catch(() => {});
-  }, [clinic.name, clinic.address, clinic.yelpUrl]);
+  const hours = doctor.hours ?? "Mon–Fri: 9am – 5pm";
+  const insurance = doctor.insurance ?? "Medicare, Blue Cross, Aetna";
+  const languages = doctor.languages ?? "English, Spanish";
+
+  const timeSlots = useRef(getTimeSlotsFromHours(doctor.hours)).current;
+
+  const handleBookClick = () => {
+    setStep("booking");
+    if (!bookingDate) setBookingDate(dateOptions[0]);
+    if (!bookingTime) setBookingTime(timeSlots[0]);
+  };
+
+  const handleConfirmBooking = () => {
+    setAppointment({
+      doctor,
+      date: bookingDate || dateOptions[0],
+      time: bookingTime || timeSlots[0],
+    });
+    setStep("receipt");
+  };
+
+  const handleReceiptClose = () => {
+    setAppointment(null);
+    setStep("detail");
+  };
 
   return (
     <motion.div
@@ -60,133 +109,179 @@ function ClinicDetailCard({ clinic, onClose, onShowMap }) {
         overflow: "hidden",
       }}
     >
-      <div style={{ position: "relative", flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
-        <div style={{ position: "relative", height: 220, flexShrink: 0 }}>
-          <img
-            src={clinic.image}
-            alt={clinic.name}
-            style={{ width: "100%", height: "100%", objectFit: "cover" }}
-          />
-          <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to top, rgba(0,0,0,0.6) 0%, transparent 50%)" }} />
-          <motion.button
-            whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
-            onClick={onClose}
-            style={{
-              position: "absolute", top: 12, left: 12,
-              background: "rgba(13,21,38,0.8)", border: "1px solid rgba(255,255,255,0.2)", borderRadius: 10,
-              width: 36, height: 36, color: C.cream, fontSize: 18,
-              cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
-              backdropFilter: "blur(4px)", fontFamily: "'DM Mono'",
-            }}
+      <AnimatePresence mode="wait">
+        {step === "receipt" && appointment && (
+          <AppointmentReceipt key="receipt" appointment={appointment} onClose={handleReceiptClose} />
+        )}
+        {(step === "detail" || step === "booking") && (
+          <motion.div
+            key="detail"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            style={{ position: "relative", flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}
           >
-            ←
-          </motion.button>
-          <div style={{ position: "absolute", bottom: 14, left: 16, right: 16 }}>
-            <div style={{ color: "#fff", fontFamily: "'Bebas Neue'", fontSize: 22, letterSpacing: 2 }}>{clinic.name}</div>
-            <div style={{ color: "rgba(255,255,255,0.8)", fontFamily: "'DM Mono'", fontSize: 12 }}>{clinic.role}</div>
-            {clinic.rating != null && (
-              <div style={{ marginTop: 6 }}>
-                <StarRating rating={clinic.rating} count={clinic.userRatingCount} size={13} color="#fff" />
-              </div>
-            )}
-          </div>
-        </div>
-
-        <div style={{ flex: 1, overflowY: "auto", padding: 20, display: "flex", flexDirection: "column", gap: 16 }}>
-          {clinic.rating != null && (
-            <div style={{ marginBottom: 4 }}>
-              <StarRating rating={clinic.rating} count={clinic.userRatingCount} size={14} />
-            </div>
-          )}
-          {hasReviewLinks && (
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 8 }}>
-              {clinic.googleMapsUrl && (
-                <a href={clinic.googleMapsUrl} target="_blank" rel="noopener noreferrer" style={{ textDecoration: "none" }}>
-                  <motion.span
-                    whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.97 }}
-                    style={{
-                      display: "inline-flex", alignItems: "center", gap: 6, padding: "8px 14px",
-                      background: "#f0f5fb", border: "1px solid #ccd8ee", borderRadius: 10,
-                      fontSize: 12, color: "#0d1b2e", fontFamily: "'DM Mono'",
-                    }}
-                  >
-                    📍 Google Maps & Reviews
-                  </motion.span>
-                </a>
-              )}
-              {yelpUrl && (
-                <a href={yelpUrl} target="_blank" rel="noopener noreferrer" style={{ textDecoration: "none" }}>
-                  <motion.span
-                    whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.97 }}
-                    style={{
-                      display: "inline-flex", alignItems: "center", gap: 6, padding: "8px 14px",
-                      background: "#f0f5fb", border: "1px solid #ccd8ee", borderRadius: 10,
-                      fontSize: 12, color: "#0d1b2e", fontFamily: "'DM Mono'",
-                    }}
-                  >
-                    ⭐ Find on Yelp
-                  </motion.span>
-                </a>
-              )}
-            </div>
-          )}
-          <div>
-            <div style={{ fontFamily: "'DM Mono'", fontSize: 10, color: "#4a6280", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 6 }}>About</div>
-            <p style={{ margin: 0, fontSize: 14, color: "#0d1b2e", lineHeight: 1.7, fontFamily: "'DM Sans'" }}>{clinic.bio}</p>
-          </div>
-
-          {[
-            { icon: "📍", label: "Address", value: clinic.address },
-            ...(clinic.phone ? [{ icon: "📞", label: "Phone", value: clinic.phone }] : []),
-            { icon: "🕐", label: "Hours", value: hours },
-            { icon: "💳", label: "Insurance", value: insurance },
-            { icon: "🗣", label: "Languages", value: languages },
-          ].map(({ icon, label, value }) => (
-            <div key={label} style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
-              <div style={{ fontSize: 18, flexShrink: 0, marginTop: 1 }}>{icon}</div>
-              <div>
-                <div style={{ fontFamily: "'DM Mono'", fontSize: 11, color: "#4a6280", marginBottom: 2 }}>{label}</div>
-                <div style={{ fontSize: 13, color: "#0d1b2e", fontFamily: "'DM Sans'" }}>{value}</div>
-              </div>
-            </div>
-          ))}
-
-          <div style={{ display: "flex", gap: 10, marginTop: 4 }}>
-            <motion.button
-              whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.97 }}
-              onClick={onShowMap}
-              style={{
-                flex: 1, padding: "11px 0", background: "#fff", color: "#0d1b2e",
-                border: "1px solid #ccd8ee", borderRadius: 12, fontSize: 13, cursor: "pointer",
-                fontFamily: "'DM Mono'",
-              }}
-            >
-              Get direction
-            </motion.button>
-            <motion.a
-              href={bookUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              style={{ flex: 1, textDecoration: "none", display: "block" }}
-            >
-              <motion.span
-                whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.97 }}
+            <div style={{ position: "relative", height: 220, flexShrink: 0 }}>
+              <img
+                src={doctor.image}
+                alt={doctor.name}
+                style={{ width: "100%", height: "100%", objectFit: "cover" }}
+              />
+              <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to top, rgba(0,0,0,0.6) 0%, transparent 50%)" }} />
+              <motion.button
+                whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }}
+                onClick={step === "booking" ? () => setStep("detail") : onClose}
                 style={{
-                  display: "block", width: "100%", padding: "11px 0", textAlign: "center",
-                  background: `linear-gradient(135deg, ${C.brand}, #0090a0)`, color: "#fff",
-                  border: "none", borderRadius: 12, fontSize: 13, fontWeight: 600, cursor: "pointer",
-                  fontFamily: "'Bebas Neue'", letterSpacing: 2,
+                  position: "absolute", top: 12, left: 12,
+                  background: "rgba(0,0,0,0.5)", border: "none", borderRadius: "50%",
+                  width: 36, height: 36, color: "#fff", fontSize: 18,
+                  cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
+                  backdropFilter: "blur(4px)",
                 }}
               >
-                {clinic.website ? "Visit website" : "Find online"}
-              </motion.span>
-            </motion.a>
-          </div>
-        </div>
-      </div>
+                ←
+              </motion.button>
+              <div style={{ position: "absolute", bottom: 14, left: 16, right: 16 }}>
+                <div style={{ color: "#fff", fontWeight: 700, fontSize: 20 }}>{doctor.name}</div>
+                <div style={{ color: "rgba(255,255,255,0.75)", fontSize: 13 }}>{doctor.role}</div>
+                {doctor.rating != null && (
+                  <div style={{ marginTop: 6 }}>
+                    <StarRating rating={doctor.rating} count={doctor.userRatingCount} size={13} color="#fff" />
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div style={{ flex: 1, overflowY: "auto", padding: 20, display: "flex", flexDirection: "column", gap: 16 }}>
+              {step === "booking" ? (
+                <>
+                  <h3 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: "#111" }}>Book appointment</h3>
+                  <div>
+                    <label style={{ fontSize: 11, color: "#999", fontWeight: 600, display: "block", marginBottom: 6 }}>Date</label>
+                    <select
+                      value={bookingDate || dateOptions[0]}
+                      onChange={(e) => setBookingDate(e.target.value)}
+                      style={{
+                        width: "100%",
+                        padding: "10px 12px",
+                        borderRadius: 10,
+                        border: "1px solid #ddd",
+                        fontSize: 14,
+                        background: "#ffffff",
+                        color: "#111111",
+                        cursor: "pointer",
+                      }}
+                    >
+                      {dateOptions.map((d) => (
+                        <option key={d} value={d}>{d}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label style={{ fontSize: 11, color: "#999", fontWeight: 600, display: "block", marginBottom: 6 }}>Time</label>
+                    <select
+                      value={bookingTime || timeSlots[0]}
+                      onChange={(e) => setBookingTime(e.target.value)}
+                      style={{
+                        width: "100%",
+                        padding: "10px 12px",
+                        borderRadius: 10,
+                        border: "1px solid #ddd",
+                        fontSize: 14,
+                        background: "#ffffff",
+                        color: "#111111",
+                        cursor: "pointer",
+                      }}
+                    >
+                      {timeSlots.map((t) => (
+                        <option key={t} value={t}>{t}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div style={{ display: "flex", gap: 10, marginTop: 8 }}>
+                    <motion.button
+                      whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.97 }}
+                      onClick={() => setStep("detail")}
+                      style={{ flex: 1, padding: "12px 0", background: "#f0f0f0", color: "#111", border: "none", borderRadius: 12, fontSize: 13, fontWeight: 600, cursor: "pointer" }}
+                    >
+                      Back
+                    </motion.button>
+                    <motion.button
+                      whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.97 }}
+                      onClick={handleConfirmBooking}
+                      style={{ flex: 1, padding: "12px 0", background: "#111", color: "#fff", border: "none", borderRadius: 12, fontSize: 13, fontWeight: 600, cursor: "pointer" }}
+                    >
+                      Confirm booking
+                    </motion.button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  {doctor.rating != null && (
+                    <div style={{ marginBottom: 4 }}>
+                      <StarRating rating={doctor.rating} count={doctor.userRatingCount} size={14} />
+                    </div>
+                  )}
+                  <div>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: "#999", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 6 }}>About</div>
+                    <p style={{ margin: 0, fontSize: 14, color: "#333", lineHeight: 1.7 }}>{doctor.bio}</p>
+                  </div>
+
+                  {[
+                    { icon: "📍", label: "Address", value: doctor.address },
+                    { icon: "🕐", label: "Hours", value: hours },
+                    { icon: "💳", label: "Insurance", value: insurance },
+                    { icon: "🗣", label: "Languages", value: languages },
+                  ].map(({ icon, label, value }) => (
+                    <div key={label} style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
+                      <div style={{ fontSize: 18, flexShrink: 0, marginTop: 1 }}>{icon}</div>
+                      <div>
+                        <div style={{ fontSize: 11, color: "#999", fontWeight: 600, marginBottom: 2 }}>{label}</div>
+                        <div style={{ fontSize: 13, color: "#222" }}>{value}</div>
+                      </div>
+                    </div>
+                  ))}
+
+                  <div style={{ display: "flex", gap: 10, marginTop: 4 }}>
+                    <motion.button
+                      whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.97 }}
+                      onClick={onShowMap}
+                      style={{
+                        flex: 1, padding: "11px 0", background: "#f0f0f0", color: "#111",
+                        border: "none", borderRadius: 12, fontSize: 13, fontWeight: 600, cursor: "pointer",
+                      }}
+                    >
+                      Get direction
+                    </motion.button>
+                    <motion.button
+                      whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.97 }}
+                      onClick={handleBookClick}
+                      style={{
+                        flex: 1, padding: "11px 0", background: "#111", color: "#fff",
+                        border: "none", borderRadius: 12, fontSize: 13, fontWeight: 600, cursor: "pointer",
+                      }}
+                    >
+                      Book Appointment
+                    </motion.button>
+                  </div>
+                </>
+              )}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </motion.div>
   );
 }
+
+const DEFAULT_DOCTORS = [
+  { name: "Dr. Sarah Chen", role: "Ophthalmologist", bio: "Specialist in retinal diseases and advanced eye surgery.", image: "https://images.unsplash.com/photo-1559839734-2b71ea197ec2?w=300&h=300&auto=format&fit=crop", address: "4500 S Lancaster Rd, Dallas, TX 75216", lat: 32.6881, lng: -96.7885, hours: "Mon–Fri: 9am – 5pm", insurance: "Medicare, Blue Cross, Aetna", languages: "English, Spanish" },
+  { name: "Dr. James Okafor", role: "Optometrist", bio: "Expert in comprehensive eye exams and contact lens fitting.", image: "https://images.unsplash.com/photo-1612349317150-e413f6a5b16d?w=300&h=300&auto=format&fit=crop", address: "3600 Gaston Ave, Dallas, TX 75246", lat: 32.7870, lng: -96.7738, hours: "Mon–Fri: 8am – 6pm", insurance: "Medicare, Blue Cross, UnitedHealthcare", languages: "English, Spanish" },
+  { name: "Dr. Amira Hassan", role: "Neuro-Ophthalmologist", bio: "Focuses on vision problems related to the nervous system.", image: "https://images.unsplash.com/photo-1594824476967-48c8b964273f?w=300&h=300&auto=format&fit=crop", address: "8200 Walnut Hill Ln, Dallas, TX 75231", lat: 32.8712, lng: -96.7580, hours: "Mon–Thu: 9am – 4pm", insurance: "Medicare, Aetna, Cigna", languages: "English, Arabic" },
+  { name: "Dr. Liam Torres", role: "Pediatric Eye Specialist", bio: "Dedicated to children's eye health.", image: "https://images.unsplash.com/photo-1622253692010-333f2da6031d?w=300&h=300&auto=format&fit=crop", address: "1935 Medical District Dr, Dallas, TX 75235", lat: 32.8107, lng: -96.8370, hours: "Mon–Fri: 9am – 5pm", insurance: "Medicare, Blue Cross, Medicaid", languages: "English, Spanish" },
+  { name: "Dr. Mei Lin", role: "Cornea Specialist", bio: "Performs corneal transplants and treats dry eye syndrome.", image: "https://images.unsplash.com/photo-1651008376811-b90baee60c1f?w=300&h=300&auto=format&fit=crop", address: "7777 Forest Ln, Dallas, TX 75230", lat: 32.9071, lng: -96.7697, hours: "Mon–Fri: 8am – 5pm", insurance: "Medicare, Blue Cross, Aetna", languages: "English, Mandarin" },
+  { name: "Dr. Carlos Mendes", role: "Glaucoma Specialist", bio: "Over 15 years managing complex glaucoma cases.", image: "https://images.unsplash.com/photo-1537368910025-700350fe46c7?w=300&h=300&auto=format&fit=crop", address: "5201 Harry Hines Blvd, Dallas, TX 75235", lat: 32.8195, lng: -96.8412, hours: "Mon–Fri: 9am – 5pm", insurance: "Medicare, Blue Cross, Aetna, Humana", languages: "English, Spanish, Portuguese" },
+];
 
 function haversineKm(lat1, lng1, lat2, lng2) {
   const R = 6371, d = Math.PI / 180;
@@ -226,8 +321,8 @@ function DoctorCard({ doctor, index, selected, onSelect, distanceKm }) {
       transition={{ delay: index * 0.05, duration: 0.3, ease: "easeOut" }}
       onClick={() => onSelect(doctor)}
       style={{
-        background: selected ? "#0d1526" : "#fff",
-        borderRadius: 12,
+        background: selected ? "#111" : "#fff",
+        borderRadius: 14,
         display: "flex",
         gap: 12,
         alignItems: "center",
@@ -235,8 +330,8 @@ function DoctorCard({ doctor, index, selected, onSelect, distanceKm }) {
         flexShrink: 0,
         cursor: "pointer",
         transition: "background 0.2s, box-shadow 0.2s",
-        boxShadow: selected ? "0 4px 16px rgba(13,21,38,0.2)" : "0 2px 8px rgba(13,27,46,0.06)",
-        border: `1px solid ${selected ? C.brand : "#ccd8ee"}`,
+        boxShadow: selected ? "0 4px 20px rgba(0,0,0,0.2)" : "0 2px 10px rgba(0,0,0,0.06)",
+        border: `2px solid ${selected ? "#111" : "transparent"}`,
       }}
     >
       <img
@@ -246,17 +341,17 @@ function DoctorCard({ doctor, index, selected, onSelect, distanceKm }) {
       />
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-          <div style={{ fontFamily: "'DM Sans'", fontWeight: 600, fontSize: 13, color: selected ? C.cream : "#0d1b2e" }}>{doctor.name}</div>
+          <div style={{ fontWeight: 700, fontSize: 13, color: selected ? "#fff" : "#111" }}>{doctor.name}</div>
           {distanceKm != null && (
-            <div style={{ fontFamily: "'DM Mono'", fontSize: 10, color: selected ? "rgba(255,255,255,0.6)" : "#4a6280", whiteSpace: "nowrap", marginLeft: 4 }}>
+            <div style={{ fontSize: 10, color: selected ? "#aaa" : "#bbb", whiteSpace: "nowrap", marginLeft: 4 }}>
               {distanceKm < 1 ? `${Math.round(distanceKm * 1000)}m` : `${distanceKm.toFixed(1)}km`}
             </div>
           )}
         </div>
-        <div style={{ fontFamily: "'DM Mono'", fontSize: 11, color: selected ? "rgba(255,255,255,0.7)" : "#4a6280", marginBottom: 4 }}>{doctor.role}</div>
+        <div style={{ fontSize: 11, color: selected ? "#aaa" : "#888", fontWeight: 500, marginBottom: 4 }}>{doctor.role}</div>
         {doctor.rating != null && (
           <div style={{ marginBottom: 2 }}>
-            <StarRating rating={doctor.rating} count={doctor.userRatingCount} size={11} color={selected ? "rgba(255,255,255,0.9)" : "#666"} />
+            <StarRating rating={doctor.rating} count={doctor.userRatingCount} size={11} color={selected ? "#ccc" : "#666"} />
           </div>
         )}
       </div>
@@ -278,22 +373,22 @@ async function fetchDoctorsByLatLng(lat, lng) {
   return data.doctors || [];
 }
 
-async function fetchClinicsDefault() {
+async function fetchDoctorsDefault() {
   const res = await fetch("/api/doctors");
-  if (!res.ok) return [];
+  if (!res.ok) return DEFAULT_DOCTORS;
   const data = await res.json();
-  return data.doctors || [];
+  return data.doctors || DEFAULT_DOCTORS;
 }
 
 export default function DoctorModal({ onClose }) {
-  const [doctors, setDoctors] = useState([]);
+  const [doctors, setDoctors] = useState(DEFAULT_DOCTORS);
   const [loading, setLoading] = useState(false);
-  const [selected, setSelected] = useState(null);
+  const [selected, setSelected] = useState(DEFAULT_DOCTORS[0]);
   const [detailDoctor, setDetailDoctor] = useState(null);
-  const [viewMode, setViewMode] = useState("map");
-  const [mapSrc, setMapSrc] = useState(() => "https://www.google.com/maps?q=eye+clinic+USA&output=embed");
+  const [viewMode, setViewMode] = useState("detail"); // "detail" | "map"
+  const [mapSrc, setMapSrc] = useState(() => getEmbedUrl(DEFAULT_DOCTORS[0].address));
   const [userLocation, setUserLocation] = useState(null);
-  const [sortedDoctors, setSortedDoctors] = useState([]);
+  const [sortedDoctors, setSortedDoctors] = useState(DEFAULT_DOCTORS);
   const [zipInput, setZipInput] = useState("");
   const [locStatus, setLocStatus] = useState("");
   const [sortBy, setSortBy] = useState("rating_high"); // "distance" | "rating_high" | "rating_low" | "reviews"
@@ -302,7 +397,7 @@ export default function DoctorModal({ onClose }) {
 
   if (!initialFetch.current && typeof window !== "undefined") {
     initialFetch.current = true;
-    fetchClinicsDefault().then((list) => {
+    fetchDoctorsDefault().then((list) => {
       if (list.length > 0) {
         const byRating = [...list].sort((a, b) => (b.rating ?? 0) - (a.rating ?? 0));
         setDoctors(list);
@@ -353,7 +448,7 @@ export default function DoctorModal({ onClose }) {
             applyLocation(lat, lng, "Your location", list);
           }
         } catch {
-          setLocStatus("Could not load clinics");
+          setLocStatus("Could not load doctors");
           setLoading(false);
         }
       },
@@ -406,7 +501,6 @@ export default function DoctorModal({ onClose }) {
   };
 
   const currentList = sortedDoctors.length > 0 ? sortedDoctors : doctors;
-  const hasClinics = currentList.length > 0;
 
   return (
     <motion.div
@@ -444,46 +538,66 @@ export default function DoctorModal({ onClose }) {
           boxShadow: "0 24px 64px rgba(0,0,0,0.28)",
         }}
       >
-        {/* Header — matches disease report */}
         <div style={{
-          display: "flex", justifyContent: "space-between", alignItems: "center",
-          padding: "20px 28px", background: "#0d1526", borderBottom: "1px solid #1e2d45", flexShrink: 0,
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          padding: "16px 28px",
+          borderBottom: "1px solid #1e2d45",
+          background: "#0d1526",
+          position: "relative",
         }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={C.brand} strokeWidth="1.5">
-              <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" />
-            </svg>
-            <div>
-              <div style={{ fontFamily: "'Bebas Neue'", fontSize: 18, letterSpacing: 3, color: C.cream }}>IRIS</div>
-              <div style={{ fontFamily: "'Instrument Serif'", fontSize: 22, color: C.cream, lineHeight: 1.2 }}>Find a Clinic</div>
-              <div style={{ fontFamily: "'DM Mono'", fontSize: 10, color: "rgba(255,255,255,0.5)", marginTop: 2 }}>Eye clinics near you — view reviews on Google & Yelp</div>
+          <div style={{ position: "absolute", right: 32, top: -12, fontFamily: "'Bebas Neue'", fontSize: 140, color: "rgba(255,255,255,0.03)", lineHeight: 1, userSelect: "none" }}>
+            IRIS
+          </div>
+          <div style={{ position: "relative", zIndex: 1 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#00c4d4" strokeWidth="1.5">
+                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" />
+              </svg>
+              <span style={{ fontFamily: "'Bebas Neue'", fontSize: 20, letterSpacing: 4, color: "#f5f2ee" }}>IRIS</span>
+              <span style={{ fontFamily: "'DM Mono'", fontSize: 10, color: "rgba(255,255,255,0.5)", letterSpacing: 1 }}>DOCTOR FINDER</span>
+            </div>
+            <div style={{ fontFamily: "'Instrument Serif'", fontSize: 26, color: "#f5f2ee", lineHeight: 1.2 }}>
+              Find an eye doctor near you
             </div>
           </div>
-          <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} onClick={onClose}
+          <motion.button
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            onClick={onClose}
             style={{
-              background: "rgba(255,255,255,0.1)", border: "1px solid rgba(255,255,255,0.2)", borderRadius: 10,
-              width: 36, height: 36, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
-              color: C.cream, fontFamily: "'DM Mono'", fontSize: 18,
-            }}>
-            ×
+              position: "relative",
+              zIndex: 1,
+              background: "rgba(255,255,255,0.08)",
+              border: "1px solid rgba(255,255,255,0.25)",
+              borderRadius: 999,
+              padding: "6px 14px",
+              color: "#f5f2ee",
+              fontSize: 12,
+              fontFamily: "'DM Mono'",
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
+            }}
+          >
+            <span>Close</span>
+            <span style={{ fontSize: 16 }}>×</span>
           </motion.button>
         </div>
 
         <div style={{ display: "flex", flex: 1, overflow: "hidden" }}>
-          <div style={{ width: 310, flexShrink: 0, display: "flex", flexDirection: "column", background: "#ffffff", borderRight: "1px solid #ccd8ee" }}>
-            <div style={{ padding: "14px 16px", borderBottom: "1px solid #ccd8ee", display: "flex", flexDirection: "column", gap: 10 }}>
+          <div style={{ width: 310, flexShrink: 0, display: "flex", flexDirection: "column", background: "#f0f0f0", borderRight: "1px solid rgba(0,0,0,0.07)" }}>
+            <div style={{ padding: "12px 14px", background: "#fff", borderBottom: "1px solid rgba(0,0,0,0.08)", display: "flex", flexDirection: "column", gap: 8 }}>
               <motion.button
                 whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.97 }}
                 onClick={handleGeolocate}
-                style={{
-                  width: "100%", padding: "10px 0", border: "none", borderRadius: 12, cursor: "pointer",
-                  background: `linear-gradient(135deg, ${C.brand}, #0090a0)`, color: "#fff",
-                  fontFamily: "'Bebas Neue'", fontSize: 15, letterSpacing: 2, display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
-                }}
+                style={{ width: "100%", padding: "9px 0", background: "#111", color: "#fff", border: "none", borderRadius: 10, fontSize: 13, fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}
               >
                 <span>📍</span> Use My Location
               </motion.button>
-              <form onSubmit={handleZipSearch} style={{ display: "flex", gap: 8 }}>
+              <form onSubmit={handleZipSearch} style={{ display: "flex", gap: 6 }}>
                 <input
                   ref={zipRef}
                   value={zipInput}
@@ -491,84 +605,68 @@ export default function DoctorModal({ onClose }) {
                   placeholder="Enter ZIP code…"
                   style={{
                     flex: 1,
-                    padding: "9px 12px",
-                    borderRadius: 10,
-                    border: "1px solid #ccd8ee",
+                    padding: "8px 12px",
+                    borderRadius: 9,
+                    border: "1px solid #ccc",
                     fontSize: 13,
                     outline: "none",
-                    background: "#fff",
-                    color: "#0d1b2e",
-                    fontFamily: "'DM Sans'",
+                    background: "#ffffff",
+                    color: "#111111",
                   }}
                 />
                 <motion.button
-                  whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.97 }}
+                  whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
                   type="submit"
-                  style={{
-                    padding: "9px 16px", border: "none", borderRadius: 10, cursor: "pointer",
-                    background: "#0d1526", color: C.cream, fontFamily: "'DM Mono'", fontSize: 12,
-                  }}
+                  style={{ padding: "8px 14px", background: "#444", color: "#fff", border: "none", borderRadius: 9, fontSize: 13, fontWeight: 600, cursor: "pointer" }}
                 >
                   Go
                 </motion.button>
               </form>
               {(loading || locStatus) && (
-                <div style={{ fontFamily: "'DM Mono'", fontSize: 11, color: locStatus.includes("denied") || locStatus.includes("not found") || locStatus.includes("Could not") ? "#c0392b" : "#4a6280", paddingLeft: 2 }}>
+                <div style={{ fontSize: 11, color: locStatus.includes("denied") || locStatus.includes("not found") || locStatus.includes("Could not") ? "#e55" : "#555", paddingLeft: 2 }}>
                   {loading || locStatus.includes("Detecting") || locStatus.includes("Searching") ? "⏳ " : userLocation ? "✓ " : "⚠ "}
-                  {loading ? "Loading clinics…" : locStatus}
+                  {loading ? "Loading doctors…" : locStatus}
                 </div>
               )}
             </div>
             <div style={{ flex: 1, overflowY: "auto", display: "flex", flexDirection: "column", gap: 8, padding: 12 }}>
-              {hasClinics ? (
-                <>
-                  <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 4 }}>
-                    <p style={{ margin: 0, fontFamily: "'DM Mono'", fontSize: 10, color: "#4a6280", letterSpacing: "0.1em", textTransform: "uppercase" }}>
-                      {currentList.length} Clinics
-                    </p>
-                    <label style={{ fontFamily: "'DM Mono'", fontSize: 11, color: "#4a6280", marginBottom: 2 }}>Sort clinics</label>
-                    <select
-                      value={sortBy}
-                      onChange={handleSortChange}
-                      style={{
-                        width: "100%",
-                        padding: "8px 10px",
-                        borderRadius: 10,
-                        border: "1px solid #ccd8ee",
-                        fontSize: 12,
-                        background: "#fff",
-                        color: "#0d1b2e",
-                        cursor: "pointer",
-                        fontFamily: "'DM Sans'",
-                      }}
-                    >
-                      {userLocation && <option value="distance">Sort by distance</option>}
-                      <option value="rating_high">Sort by rating (high first)</option>
-                      <option value="rating_low">Sort by rating (low first)</option>
-                      <option value="reviews">Sort by most reviews</option>
-                    </select>
-                  </div>
-                  {currentList.map((doc, i) => (
-                    <DoctorCard
-                      key={`${doc.name}-${doc.npi || i}`}
-                      doctor={doc}
-                      index={i}
-                      selected={selected?.name === doc.name}
-                      onSelect={handleSelectDoctor}
-                      distanceKm={userLocation ? doc.dist : null}
-                    />
-                  ))}
-                </>
-              ) : (
-                <div style={{ padding: 20, textAlign: "center" }}>
-                  <p style={{ fontFamily: "'DM Mono'", fontSize: 11, color: "#4a6280", marginBottom: 12 }}>
-                    Enter a ZIP code above or tap “Use My Location” to find real eye clinics near you.
-                  </p>
-                  <p style={{ fontSize: 13, color: "#0d1b2e", lineHeight: 1.6 }}>
-                    Results come from the official NPI registry and Google — no fake data.
-                  </p>
-                </div>
-              )}
+              <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 4 }}>
+                <p style={{ margin: 0, fontSize: 10, color: "#999", fontWeight: 600, letterSpacing: "0.1em", textTransform: "uppercase" }}>
+                  {currentList.length} Specialists
+                </p>
+                <label style={{ fontSize: 11, color: "#777", marginBottom: 2 }}>
+                  Sort doctors
+                </label>
+                <select
+                  value={sortBy}
+                  onChange={handleSortChange}
+                  style={{
+                    width: "100%",
+                    padding: "8px 10px",
+                    borderRadius: 8,
+                    border: "1px solid #ddd",
+                    fontSize: 12,
+                    background: "#ffffff",
+                    color: "#111111",
+                    cursor: "pointer",
+                  }}
+                >
+                  {userLocation && <option value="distance">Sort by distance</option>}
+                  <option value="rating_high">Sort by rating (high first)</option>
+                  <option value="rating_low">Sort by rating (low first)</option>
+                  <option value="reviews">Sort by most reviews</option>
+                </select>
+              </div>
+              {currentList.map((doc, i) => (
+                <DoctorCard
+                  key={doc.name}
+                  doctor={doc}
+                  index={i}
+                  selected={selected?.name === doc.name}
+                  onSelect={handleSelectDoctor}
+                  distanceKm={userLocation ? doc.dist : null}
+                />
+              ))}
             </div>
           </div>
 
@@ -590,7 +688,6 @@ export default function DoctorModal({ onClose }) {
               />
             </AnimatePresence>
 
-            {hasClinics && (
             <div style={{ position: "absolute", top: 12, right: 12, zIndex: 20 }}>
               <motion.button
                 whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.97 }}
@@ -606,26 +703,24 @@ export default function DoctorModal({ onClose }) {
                   }
                 }}
                 style={{
-                  padding: "8px 16px",
-                  borderRadius: 12,
+                  padding: "8px 14px",
+                  borderRadius: 999,
                   border: "none",
                   fontSize: 12,
                   fontWeight: 600,
                   cursor: "pointer",
-                  background: "#0d1526",
-                  color: C.cream,
-                  fontFamily: "'DM Mono'",
+                  background: "#111",
+                  color: "#fff",
                 }}
               >
                 {viewMode === "map" || !detailDoctor ? "Get detail" : "Get direction"}
               </motion.button>
             </div>
-            )}
 
             <AnimatePresence>
               {viewMode === "detail" && detailDoctor && (
-                <ClinicDetailCard
-                  clinic={detailDoctor}
+                <DoctorDetailCard
+                  doctor={detailDoctor}
                   onClose={() => {
                     setDetailDoctor(null);
                     setViewMode("map");

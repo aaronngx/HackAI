@@ -3,6 +3,16 @@ import { NextResponse } from "next/server";
 
 const DEFAULT_IMAGE = "https://images.unsplash.com/photo-1559839734-2b71ea197ec2?w=300&h=300&auto=format&fit=crop";
 
+/** Fallback list when Google Places is not configured or fails. Includes rating for sort. */
+const FALLBACK_DOCTORS = [
+  { name: "Dr. Sarah Chen", role: "Ophthalmologist", bio: "Specialist in retinal diseases and advanced eye surgery.", image: DEFAULT_IMAGE, address: "4500 S Lancaster Rd, Dallas, TX 75216", lat: 32.6881, lng: -96.7885, hours: "Mon–Fri: 9am – 5pm", insurance: "Medicare, Blue Cross, Aetna", languages: "English, Spanish", rating: 4.8, userRatingCount: 124 },
+  { name: "Dr. James Okafor", role: "Optometrist", bio: "Expert in comprehensive eye exams and contact lens fitting.", image: "https://images.unsplash.com/photo-1612349317150-e413f6a5b16d?w=300&h=300&auto=format&fit=crop", address: "3600 Gaston Ave, Dallas, TX 75246", lat: 32.7870, lng: -96.7738, hours: "Mon–Fri: 8am – 6pm", insurance: "Medicare, Blue Cross, UnitedHealthcare", languages: "English, Spanish", rating: 4.6, userRatingCount: 89 },
+  { name: "Dr. Amira Hassan", role: "Neuro-Ophthalmologist", bio: "Focuses on vision problems related to the nervous system.", image: "https://images.unsplash.com/photo-1594824476967-48c8b964273f?w=300&h=300&auto=format&fit=crop", address: "8200 Walnut Hill Ln, Dallas, TX 75231", lat: 32.8712, lng: -96.7580, hours: "Mon–Thu: 9am – 4pm", insurance: "Medicare, Aetna, Cigna", languages: "English, Arabic", rating: 4.9, userRatingCount: 67 },
+  { name: "Dr. Liam Torres", role: "Pediatric Eye Specialist", bio: "Dedicated to children's eye health.", image: "https://images.unsplash.com/photo-1622253692010-333f2da6031d?w=300&h=300&auto=format&fit=crop", address: "1935 Medical District Dr, Dallas, TX 75235", lat: 32.8107, lng: -96.8370, hours: "Mon–Fri: 9am – 5pm", insurance: "Medicare, Blue Cross, Medicaid", languages: "English, Spanish", rating: 4.7, userRatingCount: 156 },
+  { name: "Dr. Mei Lin", role: "Cornea Specialist", bio: "Performs corneal transplants and treats dry eye syndrome.", image: "https://images.unsplash.com/photo-1651008376811-b90baee60c1f?w=300&h=300&auto=format&fit=crop", address: "7777 Forest Ln, Dallas, TX 75230", lat: 32.9071, lng: -96.7697, hours: "Mon–Fri: 8am – 5pm", insurance: "Medicare, Blue Cross, Aetna", languages: "English, Mandarin", rating: 4.5, userRatingCount: 43 },
+  { name: "Dr. Carlos Mendes", role: "Glaucoma Specialist", bio: "Over 15 years managing complex glaucoma cases.", image: "https://images.unsplash.com/photo-1537368910025-700350fe46c7?w=300&h=300&auto=format&fit=crop", address: "5201 Harry Hines Blvd, Dallas, TX 75235", lat: 32.8195, lng: -96.8412, hours: "Mon–Fri: 9am – 5pm", insurance: "Medicare, Blue Cross, Aetna, Humana", languages: "English, Spanish, Portuguese", rating: 4.4, userRatingCount: 98 },
+];
+
 /** Format Google's regularOpeningHours to a short string (e.g. "Mon–Fri: 9am – 5pm") */
 function formatOpeningHours(periods) {
   if (!periods?.length) return null;
@@ -30,22 +40,11 @@ function formatHour(h, m) {
   return `${h12}:${min.toString().padStart(2, "0")} ${am ? "AM" : "PM"}`;
 }
 
-/** Build review/search links for a clinic (no scraping - direct links to review sites) */
-function buildClinicLinks(name, address) {
-  const query = `${name} ${address || ""}`.trim();
-  const encoded = encodeURIComponent(query);
-  return {
-    googleMapsUrl: `https://www.google.com/maps/search/?api=1&query=${encoded}`,
-    yelpUrl: `https://www.yelp.com/search?find_desc=${encodeURIComponent(name)}&find_loc=${encodeURIComponent(address || "")}`,
-    googleSearchUrl: `https://www.google.com/search?q=${encoded}`,
-  };
-}
-
-/** Fetch eye clinics from Google Places API (clinics/practices with ratings, website) */
-async function fetchClinicsFromGooglePlaces(lat, lng, apiKey) {
+/** Fetch real doctors from Google Places API (eye doctors / ophthalmologists near location) */
+async function fetchDoctorsFromGooglePlaces(lat, lng, apiKey) {
   const url = "https://places.googleapis.com/v1/places:searchText";
   const body = {
-    textQuery: "eye clinic optometry ophthalmology vision center",
+    textQuery: "ophthalmologist eye doctor optometrist",
     locationBias: {
       circle: {
         center: { latitude: lat, longitude: lng },
@@ -66,17 +65,16 @@ async function fetchClinicsFromGooglePlaces(lat, lng, apiKey) {
   if (!res.ok) return null;
   const data = await res.json();
   const places = data.places || [];
-  const clinics = places.map((p) => {
-    const name = p.displayName?.text || "Eye Care Clinic";
+  const doctors = places.map((p) => {
+    const name = p.displayName?.text || "Eye Care Provider";
     const address = p.formattedAddress || "";
     const location = p.location;
     const latP = location?.latitude ?? 0;
     const lngP = location?.longitude ?? 0;
-    const links = buildClinicLinks(name, address);
     return {
       name,
-      role: "Eye care clinic",
-      bio: "Eye care clinic from Google. View reviews on Google Maps or Yelp.",
+      role: "Eye care provider",
+      bio: "Practice information from Google. Contact office for insurance and languages.",
       image: DEFAULT_IMAGE,
       address,
       lat: latP,
@@ -87,19 +85,18 @@ async function fetchClinicsFromGooglePlaces(lat, lng, apiKey) {
       rating: p.rating != null ? Number(p.rating) : null,
       userRatingCount: p.userRatingCount != null ? Number(p.userRatingCount) : null,
       placeId: p.id,
-      ...links,
     };
   }).filter((d) => d.lat && d.lng && d.address);
 
-  if (clinics.length === 0) return null;
+  if (doctors.length === 0) return null;
 
-  for (let i = 0; i < Math.min(clinics.length, 10); i++) {
-    const d = clinics[i];
+  for (let i = 0; i < Math.min(doctors.length, 10); i++) {
+    const d = doctors[i];
     if (!d.placeId) continue;
     try {
       const detailRes = await fetch(
-        `https://places.googleapis.com/v1/places/${d.placeId}`,
-        { headers: { "X-Goog-Api-Key": apiKey, "X-Goog-FieldMask": "regularOpeningHours,websiteUri" } }
+        `https://places.googleapis.com/v1/places/${d.placeId}?fields=regularOpeningHours`,
+        { headers: { "X-Goog-Api-Key": apiKey, "X-Goog-FieldMask": "regularOpeningHours" } }
       );
       if (!detailRes.ok) continue;
       const detail = await detailRes.json();
@@ -108,86 +105,11 @@ async function fetchClinicsFromGooglePlaces(lat, lng, apiKey) {
         const formatted = formatOpeningHours(hours.periods);
         if (formatted) d.hours = formatted;
       }
-      if (detail.websiteUri) d.website = detail.websiteUri;
     } catch (_) {
       // keep default hours
     }
   }
-  return clinics;
-}
-
-/** Fetch eye clinics from NPPES (organizations only - NPI-2) - free, no API key */
-async function fetchClinicsFromNPPES(postalCode, state) {
-  const params = new URLSearchParams({
-    version: "2.1",
-    limit: "50",
-    enumeration_type: "NPI-2",
-  });
-  if (postalCode) params.set("postal_code", postalCode.slice(0, 5));
-  if (state) params.set("state", state);
-
-  const clinics = [];
-  const taxonomies = ["Ophthalmology", "Optometrist"];
-
-  for (const tax of taxonomies) {
-    try {
-      const p = new URLSearchParams(params);
-      p.set("taxonomy_description", tax);
-      const res = await fetch(
-        `https://npiregistry.cms.hhs.gov/api/?${p.toString()}`,
-        { headers: { "User-Agent": "HackAI-EyeHealth/1.0" } }
-      );
-      if (!res.ok) continue;
-      const data = await res.json();
-      if (data.Errors?.length) continue;
-      const results = data.results || [];
-      for (const r of results) {
-        const addr = r.addresses?.find((a) => a.address_purpose === "LOCATION") || r.addresses?.[0];
-        if (!addr?.address_1) continue;
-        const parts = [addr.address_1, addr.address_2, addr.city, addr.state, addr.postal_code?.slice(0, 5)].filter(Boolean);
-        const address = parts.join(", ").replace(/\s+/g, " ");
-        const phone = addr.telephone_number || null;
-        const name = r.basic?.organization_name || "Eye Care Clinic";
-        const role = tax === "Ophthalmology" ? "Ophthalmology clinic" : "Optometry clinic";
-        const links = buildClinicLinks(name, address);
-        clinics.push({
-          name,
-          role,
-          bio: `Licensed eye care clinic from NPI registry. View reviews on Google Maps or Yelp.`,
-          image: DEFAULT_IMAGE,
-          address,
-          phone,
-          hours: "Contact office for hours",
-          insurance: "Contact office",
-          languages: "Contact office",
-          rating: null,
-          userRatingCount: null,
-          website: null,
-          npi: r.number,
-          ...links,
-        });
-      }
-    } catch (_) {
-      // continue with next taxonomy
-    }
-  }
-
-  if (clinics.length === 0) return null;
-
-  const seen = new Set();
-  let filtered = clinics;
-  if (state) {
-    const stateUpper = state.toUpperCase();
-    filtered = clinics.filter((d) => d.address?.toUpperCase().includes(`, ${stateUpper},`) || d.address?.toUpperCase().endsWith(` ${stateUpper}`));
-    if (filtered.length === 0) filtered = clinics;
-  }
-  const deduped = filtered.filter((d) => {
-    const key = `${d.name}|${d.address}`;
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
-  return deduped;
+  return doctors;
 }
 
 /** Geocode an address to lat/lng using Nominatim */
@@ -200,25 +122,6 @@ async function geocodeAddress(address) {
     const data = await res.json();
     if (!data?.length) return null;
     return { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) };
-  } catch {
-    return null;
-  }
-}
-
-/** Reverse geocode lat/lng to get state and postal code */
-async function reverseGeocode(lat, lng) {
-  try {
-    const res = await fetch(
-      `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json`,
-      { headers: { "Accept-Language": "en", "User-Agent": "HackAI-EyeHealth/1.0" } }
-    );
-    const data = await res.json();
-    if (!data?.address) return null;
-    const addr = data.address;
-    return {
-      state: addr.state?.slice(0, 2) || addr["ISO3166-2-lvl4"]?.split("-")[1],
-      postal_code: addr.postcode || addr.postal_code,
-    };
   } catch {
     return null;
   }
@@ -280,7 +183,6 @@ async function scrapeDoctorsFromUrl(url) {
     const img = $card.find("img").attr("src");
     const image = img && (img.startsWith("http") || img.startsWith("//")) ? (img.startsWith("//") ? `https:${img}` : img) : DEFAULT_IMAGE;
 
-    const links = buildClinicLinks(name.slice(0, 60), address || "Address on request");
     doctors.push({
       name: name.slice(0, 60),
       role,
@@ -292,7 +194,6 @@ async function scrapeDoctorsFromUrl(url) {
       languages,
       rating: null,
       userRatingCount: null,
-      ...links,
     });
   }
 
@@ -338,38 +239,13 @@ export async function GET(request) {
 
   if (googleKey) {
     try {
-      const fromGoogle = await fetchClinicsFromGooglePlaces(centerLat, centerLng, googleKey);
+      const fromGoogle = await fetchDoctorsFromGooglePlaces(centerLat, centerLng, googleKey);
       if (fromGoogle?.length > 0) {
         doctors = fromGoogle;
         source = "google_places";
       }
     } catch (_) {
-      // fall through to NPPES or scrape
-    }
-  }
-
-  if (doctors.length === 0) {
-    try {
-      let postalCode = zip?.slice(0, 5);
-      let state = "TX";
-      if (userLat != null && userLng != null && !postalCode) {
-        const rev = await reverseGeocode(userLat, userLng);
-        if (rev) {
-          state = rev.state || state;
-          postalCode = rev.postal_code?.slice(0, 5) || postalCode;
-        }
-      }
-      if (!postalCode) postalCode = "75201";
-      let fromNPPES = await fetchClinicsFromNPPES(postalCode, state);
-      if (fromNPPES?.length === 0 && state) {
-        fromNPPES = await fetchClinicsFromNPPES(null, state);
-      }
-      if (fromNPPES?.length > 0) {
-        doctors = fromNPPES;
-        source = "nppes";
-      }
-    } catch (_) {
-      // fall through to scrape
+      // fall through to fallback or scrape
     }
   }
 
@@ -395,9 +271,12 @@ export async function GET(request) {
     } catch (_) {}
   }
 
-  // No fake fallback - only real data from Google Places, NPPES, or scrape
+  if (doctors.length === 0) {
+    doctors = [...FALLBACK_DOCTORS];
+    source = "fallback";
+  }
 
-  // Geocode any clinic missing lat/lng
+  // Geocode any doctor missing lat/lng
   for (const d of doctors) {
     if (d.lat != null && d.lng != null) continue;
     const coords = await geocodeAddress(d.address);
@@ -407,19 +286,9 @@ export async function GET(request) {
     }
   }
 
-  // Ensure all clinics have review links (Google Maps, Yelp)
-  for (const d of doctors) {
-    if (!d.googleMapsUrl || !d.yelpUrl) {
-      const links = buildClinicLinks(d.name, d.address);
-      d.googleMapsUrl = d.googleMapsUrl ?? links.googleMapsUrl;
-      d.yelpUrl = d.yelpUrl ?? links.yelpUrl;
-      d.googleSearchUrl = d.googleSearchUrl ?? links.googleSearchUrl;
-    }
-  }
-
   const withCoords = doctors.filter((d) => d.lat != null && d.lng != null);
   if (withCoords.length === 0) {
-    return NextResponse.json({ doctors: [], source: source || "none" });
+    return NextResponse.json({ doctors: FALLBACK_DOCTORS, source: "fallback" });
   }
 
   if (userLat != null && userLng != null) {

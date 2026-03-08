@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import Starsfield from "./Starsfield.js";
 import PanelOverlay from "./PanelOverlay.jsx";
@@ -98,16 +98,20 @@ export default function App() {
   const [loginOriginRect, setLoginOriginRect] = useState(null);
   const [signupOriginRect, setSignupOriginRect] = useState(null);
   const [doctorModalOpen, setDoctorModalOpen] = useState(false);
-  const [user, setUser] = useState(() => {
-    if (typeof window === "undefined") return null;
+  const [user, setUser] = useState(null);
+  const [isUserOpen, setIsUserOpen] = useState(false);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
     try {
       const storedUser = localStorage.getItem("user");
-      return storedUser ? JSON.parse(storedUser) : null;
+      if (storedUser) {
+        setUser(JSON.parse(storedUser));
+      }
     } catch {
-      return null;
+      // ignore parse errors
     }
-  });
-  const [isUserOpen, setIsUserOpen] = useState(false);
+  }, []);
 
   const handleHeroClick = () => {
     setClicked(true);
