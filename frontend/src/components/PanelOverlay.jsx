@@ -10,7 +10,7 @@ const panels = [
   { title: "Doctor Find" },
 ];
 
-function PlaceholderContent({ title, desc, icon }) {
+function PlaceholderContent({ title, desc, icon, onStart }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100%", gap: 24, padding: "0 40px", textAlign: "center" }}>
       <div style={{ fontSize: 72 }}>{icon}</div>
@@ -18,6 +18,7 @@ function PlaceholderContent({ title, desc, icon }) {
       <p style={{ color: "#aaa", fontSize: "clamp(15px, 2vw, 20px)", lineHeight: 1.7, maxWidth: 560, margin: 0 }}>{desc}</p>
       <motion.button
         whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.97 }}
+        onClick={onStart}
         style={{ marginTop: 8, padding: "14px 36px", background: "#fff", color: "#000", border: "none", borderRadius: 14, fontSize: 15, fontWeight: 700, cursor: "pointer" }}
       >
         Get Started
@@ -26,14 +27,18 @@ function PlaceholderContent({ title, desc, icon }) {
   );
 }
 
-const panelContent = {
+const panelContent = (onExamStart) => ({
   0: <PlaceholderContent title="Eye Disease Detect" desc="AI-powered detection of retinal conditions, cataracts, glaucoma and more from fundus images." icon="👁️" />,
-  1: <PlaceholderContent title="Eyes Exam" desc="Comprehensive virtual eye exam powered by computer vision. Check visual acuity, colour blindness and more." icon="🔬" />,
+  1: <PlaceholderContent title="Eyes Exam" desc="Comprehensive virtual eye exam powered by computer vision. Check visual acuity, colour blindness and more." icon="🔬" onStart={onExamStart} />,
   2: <PlaceholderContent title="Report" desc="View your full diagnostic history, export PDF reports and share results directly with your doctor." icon="📋" />,
-};
+});
 
 export default function PanelOverlay({ panelIndex, originRect, onClose }) {
   const [doctorOpen, setDoctorOpen] = useState(false);
+
+  const handleExamStart = () => {
+    window.location.href = '/exam';
+  };
 
   const from = originRect
     ? { top: originRect.top, left: originRect.left, width: originRect.width, height: originRect.height, borderRadius: 32 }
@@ -98,7 +103,7 @@ export default function PanelOverlay({ panelIndex, originRect, onClose }) {
                 Open Doctor Finder
               </motion.button>
             </div>
-          ) : panelContent[panelIndex]}
+          ) : panelContent(handleExamStart)[panelIndex]}
         </div>
       </motion.div>
 
