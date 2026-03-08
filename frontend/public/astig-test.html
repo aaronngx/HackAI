@@ -3,352 +3,487 @@
 <head>
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Astigmatism Test – Phase 1</title>
+  <title>Astigmatism Screening</title>
   <style>
-    * { margin:0; padding:0; box-sizing:border-box; }
-    body { background:#0a0a0f; color:#e0e0e0; font-family:'Segoe UI',system-ui,sans-serif; height:100vh; display:flex; flex-direction:column; overflow:hidden; }
+    *{margin:0;padding:0;box-sizing:border-box;}
+    body{background:#000;color:#e0e0e0;font-family:'Segoe UI',system-ui,sans-serif;height:100vh;overflow:hidden;display:flex;flex-direction:column;}
 
-    header { padding:8px 18px; background:#111118; border-bottom:1px solid #222; display:flex; align-items:center; gap:14px; flex-shrink:0; }
-    header h1 { font-size:15px; color:#00FF88; letter-spacing:1px; }
-    header p  { font-size:11px; color:#555; }
-    #phase-badge { margin-left:auto; font-size:11px; color:#FFD700; background:#1a1a00; border:1px solid #444400; border-radius:4px; padding:2px 8px; }
+    /* ── Header (hidden during fullscreen) ── */
+    header{padding:7px 16px;background:#0a0a12;border-bottom:1px solid #1a1a2a;display:flex;align-items:center;gap:12px;flex-shrink:0;}
+    header h1{font-size:14px;color:#00FF88;letter-spacing:1px;}
+    #phase-badge{margin-left:auto;font-size:11px;color:#FFD700;background:#1a1600;border:1px solid #443300;border-radius:4px;padding:2px 8px;}
+    #btn-debug-toggle{background:#1a1a2a;border:1px solid #333;color:#888;border-radius:4px;padding:3px 10px;font-size:11px;cursor:pointer;}
 
     /* ── Main layout ── */
-    main { flex:1; display:flex; overflow:hidden; min-height:0; }
+    main{flex:1;display:flex;overflow:hidden;min-height:0;}
 
-    /* ── Stimulus canvas area ── */
-    #stimulus-wrap { flex:1; position:relative; background:#000; display:flex; align-items:center; justify-content:center; }
-    #stim-canvas   { display:block; width:100%; height:100%; }
+    /* ── Stimulus + overlay area ── */
+    #stim-wrap{flex:1;position:relative;background:#000;overflow:hidden;}
+    #stim-canvas{display:block;width:100%;height:100%;}
+    #video{position:absolute;opacity:0;width:1px;height:1px;}
 
-    /* ── Control panel ── */
-    #ctrl-panel { width:240px; background:#111118; border-left:1px solid #222; padding:12px 10px; overflow-y:auto; flex-shrink:0; }
-    #ctrl-panel h2 { font-size:12px; color:#00FF88; margin-bottom:8px; }
-    .ctrl-group { margin-bottom:12px; }
-    .ctrl-label { font-size:11px; color:#888; margin-bottom:3px; }
-    .ctrl-val   { font-size:11px; color:#fff; font-weight:600; }
-    input[type=range] { width:100%; accent-color:#00FF88; }
-    select, input[type=number] { width:100%; background:#1a1a24; color:#ddd; border:1px solid #333; border-radius:4px; padding:4px 6px; font-size:11px; }
-    button { width:100%; padding:7px; border:none; border-radius:6px; font-size:12px; font-weight:700; cursor:pointer; margin-top:4px; }
-    .btn-green  { background:#00FF88; color:#000; }
-    .btn-red    { background:#FF4444; color:#fff; }
-    .btn-blue   { background:#2255FF; color:#fff; }
-    .btn-gray   { background:#333; color:#aaa; border:1px solid #444; }
-    button:disabled { opacity:0.35; cursor:not-allowed; }
+    /* ── Overlays ── */
+    .ov{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;background:rgba(0,0,0,0.93);z-index:60;gap:14px;}
+    .ov.hidden{display:none;}
+    .ov h2{color:#00FF88;font-size:22px;letter-spacing:1px;}
+    .ov p{color:#aaa;font-size:13px;line-height:1.75;max-width:460px;text-align:center;}
+    .ov .note{font-size:11px;color:#555;max-width:440px;text-align:center;}
 
-    hr { border:none; border-top:1px solid #222; margin:8px 0; }
-    .section-label { font-size:10px; color:#666; text-transform:uppercase; letter-spacing:1px; margin:6px 0 3px; }
-    table { width:100%; border-collapse:collapse; font-size:11px; }
-    td { padding:2px 0; }
-    td:first-child { color:#666; width:90px; }
-    .val-ok   { color:#00FF88; }
-    .val-warn { color:#FFD700; }
-    .val-err  { color:#FF4444; }
+    /* spinner */
+    .spinner{width:36px;height:36px;border:3px solid #222;border-top-color:#00FF88;border-radius:50%;animation:spin .8s linear infinite;}
+    @keyframes spin{to{transform:rotate(360deg);}}
 
-    /* ── Overlay states ── */
-    .overlay { position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; background:rgba(0,0,0,0.92); z-index:50; }
-    .overlay.hidden { display:none; }
-    .overlay h2 { color:#00FF88; font-size:20px; margin-bottom:14px; }
-    .overlay p  { color:#aaa; font-size:13px; line-height:1.7; max-width:440px; text-align:center; }
+    /* buttons */
+    .btn{padding:9px 26px;border:none;border-radius:7px;font-size:13px;font-weight:700;cursor:pointer;transition:opacity .15s;}
+    .btn:disabled{opacity:.3;cursor:not-allowed;}
+    .btn-green{background:#00FF88;color:#000;}
+    .btn-blue {background:#2255FF;color:#fff;}
+    .btn-gray {background:#222;color:#aaa;border:1px solid #444;}
+    .btn-row  {display:flex;gap:10px;flex-wrap:wrap;justify-content:center;}
 
-    /* ── Display calibration ── */
-    #cal-card-wrap { position:relative; margin:20px 0; }
-    #cal-card {
-      background:#fff; border:3px solid #FFD700;
-      border-radius:8px; display:flex; align-items:center; justify-content:center;
-      color:#222; font-size:13px; font-weight:600; cursor:ew-resize;
-      user-select:none;
+    /* ── Calibration card ── */
+    #cal-card{background:#fff;border:3px solid #FFD700;border-radius:8px;display:flex;align-items:center;justify-content:center;color:#333;font-size:12px;font-weight:600;user-select:none;}
+    #cal-slider-wrap{display:flex;flex-direction:column;align-items:center;gap:8px;width:380px;}
+    #cal-slider{width:100%;accent-color:#FFD700;}
+    #cal-val{font-size:12px;color:#FFD700;}
+
+    /* ── Monocular cover progress ── */
+    #cover-bar-wrap{width:260px;height:8px;background:#222;border-radius:4px;overflow:hidden;}
+    #cover-bar{height:100%;background:#00FF88;width:0%;transition:width .05s;}
+    #cover-status{font-size:18px;font-weight:800;letter-spacing:2px;}
+
+    /* ── On-canvas message overlay ── */
+    #msg-overlay{
+      position:absolute;bottom:60px;left:50%;transform:translateX(-50%);
+      background:rgba(0,0,0,0.70);padding:8px 22px;border-radius:8px;
+      font-size:16px;font-weight:700;color:#fff;letter-spacing:1px;
+      text-align:center;pointer-events:none;display:none;white-space:nowrap;
     }
-    #cal-card-hint { font-size:11px; color:#888; margin-top:6px; text-align:center; }
-    #cal-slider-wrap { display:flex; flex-direction:column; align-items:center; gap:6px; width:360px; }
-    #cal-slider { width:100%; accent-color:#FFD700; }
-    #cal-val { font-size:12px; color:#FFD700; }
-
-    /* ── Spinner ── */
-    .spinner { width:38px; height:38px; border:3px solid #333; border-top-color:#00FF88; border-radius:50%; animation:spin 0.8s linear infinite; margin-bottom:12px; }
-    @keyframes spin { to { transform:rotate(360deg); } }
-
-    /* ── Distance badge on canvas ── */
-    #dist-badge {
-      position:absolute; bottom:14px; left:50%; transform:translateX(-50%);
-      background:rgba(0,0,0,0.65); border:1px solid #333; border-radius:6px;
-      padding:4px 14px; font-size:13px; color:#aaa; pointer-events:none;
-      display:none;
+    #label-overlay{
+      position:absolute;top:18px;left:50%;transform:translateX(-50%);
+      font-size:26px;font-weight:900;color:#FFD700;
+      text-shadow:0 0 12px #FFD700;pointer-events:none;display:none;
     }
-    #dist-badge.ok   { color:#00FF88; border-color:#00FF88; }
-    #dist-badge.warn { color:#FFD700; border-color:#FFD700; }
-    #dist-badge.err  { color:#FF4444; border-color:#FF4444; }
+    #progress-overlay{
+      position:absolute;top:14px;right:16px;
+      font-size:12px;color:#555;pointer-events:none;
+    }
+    #dist-badge{
+      position:absolute;bottom:14px;right:14px;
+      background:rgba(0,0,0,0.6);border:1px solid #333;border-radius:5px;
+      padding:3px 10px;font-size:12px;color:#666;pointer-events:none;
+    }
+    #dist-badge.ok{color:#00FF88;border-color:#00FF88;}
+    #dist-badge.warn{color:#FFD700;border-color:#FFD700;}
+    #dist-badge.err{color:#FF4444;border-color:#FF4444;}
 
-    /* hidden video for MediaPipe */
-    #video { position:absolute; opacity:0; width:1px; height:1px; }
+    /* ── Results screen ── */
+    #ov-results table{border-collapse:collapse;margin:10px 0;}
+    #ov-results td{padding:6px 18px;font-size:14px;}
+    #ov-results td:first-child{color:#888;text-align:right;}
+    #ov-results td:last-child{color:#fff;font-weight:700;}
+    .result-section{background:#0d0d1a;border:1px solid #223;border-radius:8px;padding:14px 20px;text-align:left;}
+    .result-section h3{font-size:12px;color:#00FF88;margin-bottom:6px;letter-spacing:1px;}
+
+    /* ── Debug panel ── */
+    #debug-panel{width:210px;background:#080810;border-left:1px solid #1a1a2a;padding:10px;overflow-y:auto;font-size:11px;flex-shrink:0;}
+    #debug-panel h2{color:#00FF88;font-size:11px;margin-bottom:6px;}
+    .dl{color:#555;padding:1px 0;}
+    .dv{color:#ccc;font-weight:600;}
+    .dv.ok{color:#00FF88;} .dv.warn{color:#FFD700;} .dv.err{color:#FF4444;}
+    table.dt{width:100%;border-collapse:collapse;}
+    table.dt td{padding:1px 0;vertical-align:top;}
+    table.dt td:first-child{color:#555;width:80px;}
+    hr.ds{border:none;border-top:1px solid #1a1a2a;margin:5px 0;}
+    .ds-label{font-size:10px;color:#444;text-transform:uppercase;letter-spacing:1px;margin:5px 0 2px;}
+
+    /* ── Axis controls (Phase 1 mode) ── */
+    #p1-controls{position:absolute;bottom:50px;left:50%;transform:translateX(-50%);display:flex;gap:10px;align-items:center;display:none;}
+    #p1-controls input[type=range]{width:140px;accent-color:#00FF88;}
+    #p1-controls select{background:#111;color:#ccc;border:1px solid #333;border-radius:4px;padding:3px 6px;font-size:11px;}
+    #p1-controls label{font-size:11px;color:#888;}
   </style>
 </head>
 <body>
 
 <header>
-  <div>
-    <h1>Astigmatism Screening</h1>
-    <p>Phase 1 — Stimulus Renderer + Distance Scaling</p>
-  </div>
-  <span id="phase-badge">CALIBRATION</span>
+  <h1>Astigmatism Screening</h1>
+  <button id="btn-debug-toggle">Debug</button>
+  <button class="btn btn-gray" id="btn-p1-mode" style="font-size:11px;padding:3px 10px">Phase 1 Preview</button>
+  <button class="btn btn-gray" id="btn-recal" style="font-size:11px;padding:3px 10px">Recalibrate Screen</button>
+  <span id="phase-badge">INIT</span>
 </header>
 
 <main>
-  <!-- ── Stimulus canvas area ── -->
-  <div id="stimulus-wrap">
+  <!-- ── Stimulus area ── -->
+  <div id="stim-wrap">
     <canvas id="stim-canvas"></canvas>
     <video id="video" autoplay playsinline muted></video>
+
+    <!-- On-canvas overlays -->
+    <div id="label-overlay"></div>
+    <div id="msg-overlay"></div>
+    <div id="progress-overlay"></div>
     <div id="dist-badge">— cm</div>
 
-    <!-- State: Display calibration -->
-    <div class="overlay" id="ov-display-cal">
-      <h2>Screen Calibration</h2>
-      <p>Hold a credit card (or ID card) against your screen.<br>
-         Drag the slider until the yellow box <strong>exactly matches</strong> your card.</p>
-      <div id="cal-slider-wrap">
-        <input type="range" id="cal-slider" min="100" max="600" value="300"/>
-        <span id="cal-val">300 px wide</span>
-        <div id="cal-card-wrap">
-          <div id="cal-card">Credit / ID Card</div>
-        </div>
-        <div id="cal-card-hint">Drag slider to resize • Card = 85.6 × 54 mm</div>
-      </div>
-      <button class="btn-green" id="btn-cal-confirm" style="width:200px;margin-top:16px">This matches my card ✓</button>
-      <button class="btn-gray"  id="btn-cal-skip"    style="width:200px;margin-top:6px">Skip (use saved / estimate)</button>
-    </div>
-
-    <!-- State: Loading MediaPipe -->
-    <div class="overlay hidden" id="ov-loading">
-      <div class="spinner"></div>
-      <span id="load-msg" style="color:#aaa;font-size:13px">Loading MediaPipe…</span>
-    </div>
-
-    <!-- State: Ready (camera running, shows stimulus) -->
-    <!-- No overlay — stimulus renders directly on canvas -->
-  </div>
-
-  <!-- ── Control panel ── -->
-  <aside id="ctrl-panel">
-    <h2>Controls</h2>
-
-    <div class="ctrl-group">
-      <div class="ctrl-label">Angle <span class="ctrl-val" id="lbl-angle">0°</span></div>
-      <input type="range" id="sl-angle" min="0" max="175" step="5" value="0"/>
-    </div>
-
-    <div class="ctrl-group">
-      <div class="ctrl-label">Target CPD <span class="ctrl-val" id="lbl-cpd">3.0</span></div>
-      <input type="range" id="sl-cpd" min="0.5" max="20" step="0.5" value="3"/>
-    </div>
-
-    <div class="ctrl-group">
-      <div class="ctrl-label">Color mode</div>
-      <select id="sel-color">
+    <!-- Phase 1 live controls -->
+    <div id="p1-controls">
+      <label>Angle <strong id="p1-angle-val">0°</strong>
+        <input type="range" id="p1-angle" min="0" max="175" step="5" value="0"/>
+      </label>
+      <label>CPD <strong id="p1-cpd-val">3.0</strong>
+        <input type="range" id="p1-cpd" min="0.5" max="20" step="0.5" value="3"/>
+      </label>
+      <select id="p1-color">
         <option value="#FF0000">Red</option>
         <option value="#0000FF">Blue</option>
         <option value="#ffffff">White</option>
       </select>
-    </div>
-
-    <div class="ctrl-group">
-      <div class="ctrl-label">Stimulus type</div>
-      <select id="sel-type">
-        <option value="grating">Grating (50% duty)</option>
-        <option value="tripole">Tripole (33% duty)</option>
+      <select id="p1-type">
+        <option value="grating">Grating</option>
+        <option value="tripole">Tripole</option>
       </select>
     </div>
 
-    <div class="ctrl-group">
-      <label style="font-size:11px;color:#888;display:flex;align-items:center;gap:6px;cursor:pointer">
-        <input type="checkbox" id="chk-fixdot" checked/>
-        Fixation dot
-      </label>
-      <label style="font-size:11px;color:#888;display:flex;align-items:center;gap:6px;cursor:pointer;margin-top:4px">
-        <input type="checkbox" id="chk-debug" checked/>
-        Debug overlay
-      </label>
-      <label style="font-size:11px;color:#888;display:flex;align-items:center;gap:6px;cursor:pointer;margin-top:4px">
-        <input type="checkbox" id="chk-live-scale" checked/>
-        Live distance scaling
-      </label>
+    <!-- ── OVERLAY: Display calibration ── -->
+    <div class="ov" id="ov-display-cal">
+      <h2>Screen Calibration</h2>
+      <p>Hold a <strong>credit card or ID card</strong> flat against your screen.<br>
+         Drag the slider until the yellow box exactly matches it.</p>
+      <div id="cal-slider-wrap">
+        <input type="range" id="cal-slider" min="100" max="700" value="300"/>
+        <span id="cal-val">300 px wide</span>
+        <div id="cal-card">Credit / ID Card&nbsp;(85.6 × 54 mm)</div>
+      </div>
+      <div class="btn-row" style="margin-top:6px">
+        <button class="btn btn-green" id="btn-cal-ok">Matches my card ✓</button>
+        <button class="btn btn-gray"  id="btn-cal-skip">Enter screen size instead</button>
+      </div>
     </div>
 
-    <button class="btn-blue"  id="btn-fullscreen">⛶ Fullscreen</button>
-    <button class="btn-gray"  id="btn-recal">Recalibrate Screen</button>
+    <!-- ── OVERLAY: Loading ── -->
+    <div class="ov hidden" id="ov-loading">
+      <div class="spinner"></div>
+      <span id="load-msg" style="color:#888;font-size:13px">Loading…</span>
+    </div>
 
-    <hr/>
-    <div class="section-label">Live Tracking</div>
-    <table><tbody>
-      <tr><td>Face</td>     <td><span id="d-face">—</span></td></tr>
-      <tr><td>Distance</td> <td><span id="d-dist">—</span></td></tr>
-      <tr><td>Dist (corr)</td><td><span id="d-dist-c">—</span></td></tr>
+    <!-- ── OVERLAY: Monocular setup ── -->
+    <div class="ov hidden" id="ov-monocular">
+      <h2>Cover One Eye</h2>
+      <p id="mono-instr">Cover your <strong id="mono-eye-name">RIGHT</strong> eye firmly with your hand.<br>
+         Keep it covered throughout the entire test.</p>
+      <div id="cover-status" style="font-size:18px;font-weight:800;letter-spacing:2px;color:#FFD700;">—</div>
+      <div id="cover-bar-wrap" style="width:260px;height:8px;background:#222;border-radius:4px;overflow:hidden;">
+        <div id="cover-bar" style="height:100%;background:#00FF88;width:0%;transition:width .05s;"></div>
+      </div>
+      <p class="note">Hold cover steady until bar fills green…</p>
+
+      <!-- Live debug for tuning -->
+      <div style="font-size:11px;color:#444;margin-top:6px;text-align:center;">
+        Hand detected: <span id="mono-hand">—</span> &nbsp;|&nbsp;
+        EAR: <span id="mono-ear">—</span>
+      </div>
+
+      <div class="btn-row" style="margin-top:12px">
+        <button class="btn btn-green" id="btn-mono-confirm">My eye is covered ✓</button>
+        <button class="btn btn-gray"  id="btn-mono-skip">Skip cover check</button>
+      </div>
+    </div>
+
+    <!-- ── OVERLAY: Axis search intro ── -->
+    <div class="ov hidden" id="ov-axis-intro">
+      <h2>Step 1 — Axis Search</h2>
+      <p>You'll see <strong>two sets of lines</strong> appear one after another.<br>
+         After each pair, press <strong>1</strong> if the <em>first</em> looked sharper,<br>
+         or <strong>2</strong> if the <em>second</em> looked sharper.</p>
+      <p>There are no right or wrong answers — trust your instinct.</p>
+      <div class="btn-row">
+        <button class="btn btn-green" id="btn-axis-start">Begin →</button>
+      </div>
+      <p class="note">Approx. 20–25 comparisons · Keep your head still</p>
+    </div>
+
+    <!-- ── OVERLAY: MDSF intro ── -->
+    <div class="ov hidden" id="ov-mdsf-intro">
+      <h2 id="mdsf-intro-title">Step 2 — Resolution Test</h2>
+      <p id="mdsf-intro-body">Fine lines will appear on the <strong>LEFT</strong> or <strong>RIGHT</strong> side of the screen.<br>
+         Press <strong>← Left arrow</strong> or <strong>→ Right arrow</strong> to indicate which side you saw them on.<br>
+         Lines will get finer as you do well — keep going as long as you can!</p>
+      <div class="btn-row">
+        <button class="btn btn-green" id="btn-mdsf-start">Begin →</button>
+      </div>
+      <p class="note" id="mdsf-intro-note">Meridian: —</p>
+    </div>
+
+    <!-- ── OVERLAY: Results ── -->
+    <div class="ov hidden" id="ov-results">
+      <h2>Screening Results</h2>
+      <div style="display:flex;gap:16px;flex-wrap:wrap;justify-content:center;">
+        <div class="result-section">
+          <h3>AXIS FOUND</h3>
+          <table><tbody>
+            <tr><td>Axis</td>      <td id="r-axis">—°</td></tr>
+            <tr><td>Confidence</td><td id="r-axis-conf">—</td></tr>
+          </tbody></table>
+        </div>
+        <div class="result-section">
+          <h3>MDSF ALONG AXIS</h3>
+          <table><tbody>
+            <tr><td>CPD</td>    <td id="r-mdsf1">—</td></tr>
+            <tr><td>Snellen</td><td id="r-sn1">—</td></tr>
+          </tbody></table>
+        </div>
+        <div class="result-section">
+          <h3>MDSF PERPENDICULAR</h3>
+          <table><tbody>
+            <tr><td>CPD</td>    <td id="r-mdsf2">—</td></tr>
+            <tr><td>Snellen</td><td id="r-sn2">—</td></tr>
+          </tbody></table>
+        </div>
+      </div>
+      <p class="note" style="margin-top:10px">⚠ Screening estimate only. Not a clinical prescription.<br>
+         A large difference in CPD between meridians may indicate astigmatism.</p>
+      <div class="btn-row" style="margin-top:10px">
+        <button class="btn btn-green" id="btn-restart">Test Again</button>
+        <button class="btn btn-blue"  id="btn-export">Export JSON</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Debug panel ── -->
+  <aside id="debug-panel" style="display:none">
+    <h2>Debug</h2>
+    <table class="dt"><tbody>
+      <tr><td>State</td>    <td><span id="d-state" class="dv">—</span></td></tr>
+      <tr><td>Face</td>     <td><span id="d-face"  class="dv">—</span></td></tr>
+      <tr><td>Cover</td>    <td><span id="d-cover" class="dv">—</span></td></tr>
     </tbody></table>
 
-    <hr/>
-    <div class="section-label">Display Cal</div>
-    <table><tbody>
-      <tr><td>mm/px</td>    <td><span id="d-mmpx">—</span></td></tr>
-      <tr><td>PPI</td>      <td><span id="d-ppi">—</span></td></tr>
-      <tr><td>Screen H</td> <td><span id="d-scrh">—</span></td></tr>
+    <hr class="ds"/><div class="ds-label">Distance</div>
+    <table class="dt"><tbody>
+      <tr><td>Raw</td>     <td><span id="d-raw"  class="dv">—</span></td></tr>
+      <tr><td>Smooth</td>  <td><span id="d-sm"   class="dv">—</span></td></tr>
+      <tr><td>Corrected</td><td><span id="d-cor" class="dv">—</span></td></tr>
     </tbody></table>
 
-    <hr/>
-    <div class="section-label">Stimulus</div>
-    <table><tbody>
-      <tr><td>Period</td>   <td><span id="d-period">—</span></td></tr>
-      <tr><td>Max CPD</td>  <td><span id="d-maxcpd">—</span></td></tr>
-      <tr><td>Angle</td>    <td><span id="d-angle">—</span></td></tr>
-      <tr><td>FPS</td>      <td><span id="d-fps">—</span></td></tr>
+    <hr class="ds"/><div class="ds-label">Display</div>
+    <table class="dt"><tbody>
+      <tr><td>mm/px</td>   <td><span id="d-mmpx" class="dv">—</span></td></tr>
+      <tr><td>PPI</td>     <td><span id="d-ppi"  class="dv">—</span></td></tr>
     </tbody></table>
 
-    <hr/>
-    <div class="section-label">Camera Offset</div>
-    <div class="ctrl-label" style="margin-top:4px">Camera above screen top (mm)</div>
-    <input type="number" id="inp-cam-offset" value="25" min="0" max="80" step="5"/>
+    <hr class="ds"/><div class="ds-label">Stimulus</div>
+    <table class="dt"><tbody>
+      <tr><td>Period px</td><td><span id="d-period" class="dv">—</span></td></tr>
+      <tr><td>Max CPD</td>  <td><span id="d-maxcpd" class="dv">—</span></td></tr>
+      <tr><td>CPD</td>      <td><span id="d-cpd"    class="dv">—</span></td></tr>
+      <tr><td>Angle</td>    <td><span id="d-angle"  class="dv">—</span></td></tr>
+    </tbody></table>
+
+    <hr class="ds"/><div class="ds-label">Axis Search</div>
+    <table class="dt"><tbody>
+      <tr><td>Phase</td>    <td><span id="d-ax-phase" class="dv">—</span></td></tr>
+      <tr><td>Progress</td> <td><span id="d-ax-prog"  class="dv">—</span></td></tr>
+      <tr><td>Pair</td>     <td><span id="d-ax-pair"  class="dv">—</span></td></tr>
+    </tbody></table>
+
+    <hr class="ds"/><div class="ds-label">Staircase</div>
+    <table class="dt"><tbody>
+      <tr><td>Reversals</td><td><span id="d-sc-rev" class="dv">—</span></td></tr>
+      <tr><td>Trials</td>   <td><span id="d-sc-tri" class="dv">—</span></td></tr>
+      <tr><td>CPD</td>      <td><span id="d-sc-cpd" class="dv">—</span></td></tr>
+    </tbody></table>
+
+    <hr class="ds"/>
+    <table class="dt"><tbody>
+      <tr><td>FPS</td><td><span id="d-fps" class="dv">—</span></td></tr>
+    </tbody></table>
   </aside>
 </main>
 
 <script type="module">
 import { DisplayCalibrator, CARD_W_MM, CARD_H_MM } from '/display-calibrator.js';
-import { DistanceSmoother }  from '/distance-smoother.js';
-import { StimulusRenderer }  from '/stimulus-renderer.js';
-import { computePD }         from '/face-eye-tracker.js';
+import { DistanceSmoother }   from '/distance-smoother.js';
+import { StimulusRenderer }   from '/stimulus-renderer.js';
+import { MonocularEnforcer }  from '/monocular-enforcer.js';
+import { AxisSearchEngine }   from '/axis-search-engine.js';
+import { StaircaseEngine }    from '/staircase-engine.js';
+import { computePD, computeEAR, R_EAR_IDX, L_EAR_IDX } from '/face-eye-tracker.js';
+import { detectHandOverEye }  from '/hand-tracker.js';
 
-// ── Constants ────────────────────────────────────────────────────────────────
-const WASM_PATH  = '/mediapipe-wasm';
-const FACE_MODEL = 'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task';
+// ─────────────────────────────────────────────────────────────────────────────
+// Constants
+// ─────────────────────────────────────────────────────────────────────────────
+const WASM_PATH    = '/mediapipe-wasm';
+const FACE_MODEL   = 'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task';
+const HAND_MODEL   = 'https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task';
 
-// ── DOM ──────────────────────────────────────────────────────────────────────
-const stimCanvas   = document.getElementById('stim-canvas');
-const video        = document.getElementById('video');
-const distBadge    = document.getElementById('dist-badge');
-const phaseBadge   = document.getElementById('phase-badge');
-const ovDisplayCal = document.getElementById('ov-display-cal');
-const ovLoading    = document.getElementById('ov-loading');
-const loadMsg      = document.getElementById('load-msg');
+const AXIS_CPD     = 3.0;    // CPD used for axis comparison stimuli [Inference]
+const AXIS_DUR_MS  = 800;    // stimulus duration per interval [Inference]
+const AXIS_ISI_MS  = 200;    // blank between intervals
+const AXIS_READY_MS= 600;    // "GET READY" pause before each comparison
 
-const slAngle      = document.getElementById('sl-angle');
-const slCPD        = document.getElementById('sl-cpd');
-const selColor     = document.getElementById('sel-color');
-const selType      = document.getElementById('sel-type');
-const chkFixdot    = document.getElementById('chk-fixdot');
-const chkDebug     = document.getElementById('chk-debug');
-const chkLiveScale = document.getElementById('chk-live-scale');
-const btnFullscreen= document.getElementById('btn-fullscreen');
-const btnRecal     = document.getElementById('btn-recal');
-const inpCamOffset = document.getElementById('inp-cam-offset');
+const MDSF_DUR_MS  = 500;    // stimulus on-screen duration [Inference]
+const MDSF_ISI_MS  = 300;    // fixation before each trial
+const MDSF_FB_MS   = 250;    // feedback duration
 
-const calSlider    = document.getElementById('cal-slider');
-const calVal       = document.getElementById('cal-val');
-const calCard      = document.getElementById('cal-card');
-const btnCalConfirm= document.getElementById('btn-cal-confirm');
-const btnCalSkip   = document.getElementById('btn-cal-skip');
+const TEST_EYE     = 'right'; // which eye to cover (left = cover left, test right)
 
-const D = id => document.getElementById(id);
+// ─────────────────────────────────────────────────────────────────────────────
+// DOM
+// ─────────────────────────────────────────────────────────────────────────────
+const canvas    = document.getElementById('stim-canvas');
+const video     = document.getElementById('video');
+const D         = id => document.getElementById(id);
+const setDv     = (id, text, cls='') => { const el=D(id); if(!el) return; el.textContent=text; el.className='dv'+(cls?' '+cls:''); };
 
-// ── Module instances ─────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// Module instances
+// ─────────────────────────────────────────────────────────────────────────────
 const calibrator = new DisplayCalibrator();
 const smoother   = new DistanceSmoother({ cameraOffsetMm: 25 });
+const enforcer   = new MonocularEnforcer({ sustainMs: 600 });
 let   renderer   = null;
 
-// ── State ────────────────────────────────────────────────────────────────────
-let faceLandmarker = null;
-let stream         = null;
-let animId         = null;
-let running        = false;
+// ─────────────────────────────────────────────────────────────────────────────
+// App state
+// ─────────────────────────────────────────────────────────────────────────────
+let appState  = 'DISPLAY_CAL'; // top-level
+let stimState = 'IDLE';        // stimulus timing state within a task
+let stimStateT = 0;            // timestamp stimulus state started
+
+// Axis search
+let axisEngine = null;
+let axisPair   = null;  // current [a, b]
+let axisStep   = 0;     // 0=ready, 1=showA, 2=isi, 3=showB, 4=response
+let foundAxis  = null;
+
+// MDSF
+let staircase1 = null; // along axis
+let staircase2 = null; // perpendicular
+let currentSC  = null;
+let mdsf1Result= null, mdsf2Result = null;
+let mdsf1Axis  = 0,   mdsf2Axis   = 90;
+let mdsfSide   = 'left'; // current trial grating side
+
+// Phase 1 preview mode
+let p1Mode = false;
+
+// Tracking
+let faceLandmarker = null, handLandmarker = null;
+let stream = null, animId = null, running = false;
+let lastFaceLms = null, lastHands = [], lastHandedness = [];
 let frameCount = 0, lastFpsT = performance.now(), fps = 0;
 
-// ── Resize canvas to fill its container ──────────────────────────────────────
+// Session data
+const session = { ts: Date.now(), axis: null, mdsf1: null, mdsf2: null };
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Canvas resize
+// ─────────────────────────────────────────────────────────────────────────────
 function resizeCanvas() {
-  const wrap = stimCanvas.parentElement;
-  stimCanvas.width  = wrap.clientWidth;
-  stimCanvas.height = wrap.clientHeight;
+  const wrap = canvas.parentElement;
+  canvas.width  = wrap.clientWidth;
+  canvas.height = wrap.clientHeight;
 }
 window.addEventListener('resize', resizeCanvas);
 resizeCanvas();
 
-// ── Display calibration UI ───────────────────────────────────────────────────
-function updateCalCard(widthPx) {
-  const aspect  = CARD_H_MM / CARD_W_MM;
-  const heightPx = widthPx * aspect;
-  calCard.style.width  = widthPx + 'px';
-  calCard.style.height = heightPx + 'px';
-  calVal.textContent   = `${widthPx} px wide`;
+// ─────────────────────────────────────────────────────────────────────────────
+// Overlay helpers
+// ─────────────────────────────────────────────────────────────────────────────
+const ovIds = ['ov-display-cal','ov-loading','ov-monocular','ov-axis-intro','ov-mdsf-intro','ov-results'];
+function showOv(id) { ovIds.forEach(o => D(o).classList.toggle('hidden', o !== id)); }
+function hideAllOv() { ovIds.forEach(o => D(o).classList.add('hidden')); }
+
+function showMsg(text, ms = 0) {
+  const el = D('msg-overlay');
+  el.textContent = text;
+  el.style.display = text ? 'block' : 'none';
+  if (ms > 0) setTimeout(() => { el.style.display = 'none'; }, ms);
+}
+function showLabel(text, color = '#FFD700') {
+  const el = D('label-overlay');
+  el.textContent  = text;
+  el.style.color  = color;
+  el.style.display = text ? 'block' : 'none';
+}
+function setProgress(text) { D('progress-overlay').textContent = text; }
+function setState(s) {
+  appState = s;
+  D('phase-badge').textContent = s;
+  setDv('d-state', s);
 }
 
-calSlider.addEventListener('input', () => updateCalCard(+calSlider.value));
-updateCalCard(+calSlider.value);
+// ─────────────────────────────────────────────────────────────────────────────
+// Display calibration UI
+// ─────────────────────────────────────────────────────────────────────────────
+function updateCard(wPx) {
+  const hPx = wPx * (CARD_H_MM / CARD_W_MM);
+  const c = D('cal-card');
+  c.style.width = wPx + 'px'; c.style.height = hPx + 'px';
+  D('cal-val').textContent = `${wPx} px wide`;
+}
 
-// Pre-fill slider if already calibrated
+D('cal-slider').addEventListener('input', e => updateCard(+e.target.value));
 if (calibrator.isCalibrated()) {
   const px = Math.round(CARD_W_MM / calibrator.mmPerPx);
-  calSlider.value = Math.min(600, Math.max(100, px));
-  updateCalCard(+calSlider.value);
+  D('cal-slider').value = Math.min(700, Math.max(100, px));
 }
+updateCard(+D('cal-slider').value);
 
-btnCalConfirm.onclick = () => {
-  const widthPx  = +calSlider.value;
-  const heightPx = widthPx * (CARD_H_MM / CARD_W_MM);
-  const mmPerPx  = DisplayCalibrator.fromCardPx(widthPx, heightPx);
-
-  if (mmPerPx < 0.04 || mmPerPx > 1.2) {
-    alert('Unusual result — please try again.');
-    return;
-  }
+D('btn-cal-ok').onclick = () => {
+  const wPx = +D('cal-slider').value, hPx = wPx * CARD_H_MM / CARD_W_MM;
+  const mmPerPx = DisplayCalibrator.fromCardPx(wPx, hPx);
+  if (mmPerPx < 0.04 || mmPerPx > 1.2) { alert('Unusual value — please try again.'); return; }
   calibrator.save(mmPerPx);
-  updateCalDisplay();
+  updateDebugCal();
   startLoading();
 };
-
-btnCalSkip.onclick = () => {
+D('btn-cal-skip').onclick = () => {
   if (!calibrator.isCalibrated()) {
-    // Estimate from window.screen and devicePixelRatio
-    const diagPx   = Math.sqrt(screen.width**2 + screen.height**2) * devicePixelRatio;
-    // Ask user for diagonal
-    const diagIn   = parseFloat(prompt('Enter your screen diagonal in inches (e.g. 15.6):', '15.6'));
+    const diagIn = parseFloat(prompt('Enter screen diagonal in inches (e.g. 15.6):', '15.6'));
     if (!diagIn || isNaN(diagIn)) return;
-    const ppi      = diagPx / diagIn;
-    const mmPerPx  = 25.4 / ppi;
-    calibrator.save(mmPerPx);
+    const diagPx  = Math.sqrt(screen.width**2 + screen.height**2) * devicePixelRatio;
+    calibrator.save(25.4 / (diagPx / diagIn));
   }
-  updateCalDisplay();
+  updateDebugCal();
   startLoading();
 };
+D('btn-recal').onclick = () => { calibrator.clear(); stopCamera(); showOv('ov-display-cal'); setState('DISPLAY_CAL'); };
 
-btnRecal.onclick = () => {
-  calibrator.clear();
-  stopCamera();
-  ovDisplayCal.classList.remove('hidden');
-  phaseBadge.textContent = 'CALIBRATION';
-};
-
-function updateCalDisplay() {
-  D('d-mmpx').textContent = calibrator.mmPerPx?.toFixed(4) ?? '—';
-  D('d-ppi').textContent  = calibrator.ppi?.toFixed(1) ?? '—';
-  D('d-scrh').textContent = calibrator.getScreenHeightMm()?.toFixed(0) + ' mm' ?? '—';
+function updateDebugCal() {
+  setDv('d-mmpx', calibrator.mmPerPx?.toFixed(4) ?? '—');
+  setDv('d-ppi',  calibrator.ppi?.toFixed(1) ?? '—');
 }
 
-// ── MediaPipe loading ─────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// MediaPipe loading + camera
+// ─────────────────────────────────────────────────────────────────────────────
 async function startLoading() {
-  ovDisplayCal.classList.add('hidden');
-  ovLoading.classList.remove('hidden');
-  phaseBadge.textContent = 'LOADING';
-
+  showOv('ov-loading'); setState('LOADING');
   try {
-    loadMsg.textContent = 'Loading MediaPipe JS…';
-    const { FaceLandmarker, FilesetResolver } =
+    D('load-msg').textContent = 'Loading MediaPipe JS…';
+    const { HandLandmarker, FaceLandmarker, FilesetResolver } =
       await new Function('return import("/mediapipe-vision.js")')();
 
-    loadMsg.textContent = 'Initializing WASM…';
+    D('load-msg').textContent = 'Initializing WASM…';
     const vision = await FilesetResolver.forVisionTasks(WASM_PATH);
 
-    loadMsg.textContent = 'Loading Face model…';
+    D('load-msg').textContent = 'Loading face model…';
     faceLandmarker = await FaceLandmarker.createFromOptions(vision, {
       baseOptions: { modelAssetPath: FACE_MODEL, delegate: 'GPU' },
       runningMode: 'VIDEO', numFaces: 1,
       outputFaceBlendshapes: false, outputFacialTransformationMatrixes: false,
     });
 
-    loadMsg.textContent = 'Starting camera…';
+    D('load-msg').textContent = 'Loading hand model…';
+    handLandmarker = await HandLandmarker.createFromOptions(vision, {
+      baseOptions: { modelAssetPath: HAND_MODEL, delegate: 'GPU' },
+      runningMode: 'VIDEO', numHands: 2,
+    });
+
+    D('load-msg').textContent = 'Starting camera…';
     stream = await navigator.mediaDevices.getUserMedia({
       video: { width:{ideal:1280}, height:{ideal:720}, frameRate:{ideal:30}, facingMode:'user' },
       audio: false,
@@ -357,102 +492,19 @@ async function startLoading() {
     await new Promise((res, rej) => { video.onloadedmetadata = res; video.onerror = rej; });
     await video.play();
 
-    // Init renderer now that canvas is sized
-    renderer = new StimulusRenderer(stimCanvas);
-
-    ovLoading.classList.add('hidden');
-    phaseBadge.textContent = 'RUNNING';
-    distBadge.style.display = 'block';
-    running = true;
+    renderer = new StimulusRenderer(canvas);
+    running  = true;
     requestAnimationFrame(renderLoop);
 
+    // Go to monocular setup (or p1 mode if active)
+    if (p1Mode) enterP1Mode();
+    else goToMonocularSetup();
+
   } catch (e) {
-    loadMsg.textContent = `Error: ${e.message}`;
-    loadMsg.style.color = '#FF4444';
+    D('load-msg').textContent = `Error: ${e.message}`;
+    D('load-msg').style.color = '#FF4444';
     console.error('[AstigTest]', e);
   }
-}
-
-// ── Render loop ───────────────────────────────────────────────────────────────
-function renderLoop(timestamp) {
-  if (!running) return;
-  animId = requestAnimationFrame(renderLoop);
-  if (video.videoWidth === 0 || video.readyState < 2) return;
-
-  const vw = video.videoWidth, vh = video.videoHeight;
-
-  // Face detection
-  const fr     = faceLandmarker.detectForVideo(video, timestamp);
-  const faceLms = (fr.faceLandmarks || [])[0] || null;
-
-  // Distance
-  let rawDist = null;
-  if (faceLms) {
-    const pd = computePD(faceLms, vw, vh);
-    rawDist = pd?.distCm ?? null;
-  }
-
-  smoother._cameraOffsetMm = +inpCamOffset.value || 25;
-  const smoothedCm  = smoother.push(rawDist);
-  const correctedMm = smoother.getCorrectedMm(calibrator.getScreenHeightMm() ?? 0);
-  const distMm      = chkLiveScale.checked
-    ? (correctedMm ?? (smoothedCm ? smoothedCm * 10 : 400))
-    : 400; // fallback: 40cm fixed if scaling off
-
-  // Stimulus params from controls
-  const angleDeg  = +slAngle.value;
-  const cpd       = +slCPD.value;
-  const color     = selColor.value;
-  const type      = selType.value;
-  const fixDot    = chkFixdot.checked;
-  const showDebug = chkDebug.checked;
-  const mmPerPx   = calibrator.mmPerPx ?? 0.18;
-
-  // Ensure canvas fills container
-  const wrap = stimCanvas.parentElement;
-  if (stimCanvas.width !== wrap.clientWidth || stimCanvas.height !== wrap.clientHeight) {
-    stimCanvas.width  = wrap.clientWidth;
-    stimCanvas.height = wrap.clientHeight;
-  }
-
-  // Draw stimulus
-  renderer.drawGrating({ angleDeg, cpd, distMm, mmPerPx, color, fixationDot: fixDot, type });
-
-  // Debug overlay
-  if (showDebug) {
-    const period = StimulusRenderer.periodPx(cpd, distMm, mmPerPx);
-    renderer.drawDebugOverlay({
-      cpd, distMm, mmPerPx, period,
-      label: `angle: ${angleDeg}°  type: ${type}  ${color === '#FF0000' ? 'RED' : color === '#0000FF' ? 'BLUE' : 'WHITE'}`,
-    });
-  }
-
-  // Distance badge
-  if (smoother.isValid()) {
-    const cm = smoothedCm.toFixed(0);
-    distBadge.textContent = `${cm} cm`;
-    distBadge.className = +cm < 25 || +cm > 150 ? 'warn' : 'ok';
-  } else {
-    distBadge.textContent = faceLms ? 'measuring…' : 'No face';
-    distBadge.className = 'err';
-  }
-
-  // FPS
-  frameCount++;
-  const now = performance.now();
-  if (now - lastFpsT >= 1000) { fps = frameCount; frameCount = 0; lastFpsT = now; }
-
-  // Debug panel
-  D('d-face').textContent   = faceLms ? '✓' : '—';
-  D('d-face').className     = faceLms ? 'val-ok' : 'val-err';
-  D('d-dist').textContent   = smoothedCm ? `${smoothedCm.toFixed(1)} cm` : '—';
-  D('d-dist-c').textContent = correctedMm ? `${(correctedMm/10).toFixed(1)} cm` : '—';
-  D('d-period').textContent = `${StimulusRenderer.periodPx(cpd, distMm, mmPerPx).toFixed(1)} px`;
-  D('d-maxcpd').textContent = `${StimulusRenderer.maxCPD(distMm, mmPerPx).toFixed(1)} cpd`;
-  D('d-angle').textContent  = `${angleDeg}°`;
-  D('d-fps').textContent    = `${fps}`;
-  D('lbl-angle').textContent = `${angleDeg}°`;
-  D('lbl-cpd').textContent   = `${cpd.toFixed(1)}`;
 }
 
 function stopCamera() {
@@ -463,28 +515,485 @@ function stopCamera() {
   smoother.reset();
 }
 
-// ── Fullscreen ────────────────────────────────────────────────────────────────
-btnFullscreen.onclick = () => {
-  const el = document.getElementById('stimulus-wrap');
-  if (!document.fullscreenElement) {
-    el.requestFullscreen?.();
-  } else {
-    document.exitFullscreen?.();
+// ─────────────────────────────────────────────────────────────────────────────
+// Phase 1 preview mode (free exploration)
+// ─────────────────────────────────────────────────────────────────────────────
+D('btn-p1-mode').onclick = () => {
+  p1Mode = !p1Mode;
+  D('btn-p1-mode').textContent = p1Mode ? 'Exit Preview' : 'Phase 1 Preview';
+  if (running) {
+    if (p1Mode) enterP1Mode();
+    else goToMonocularSetup();
+  } else if (!running) {
+    // Start camera for preview
+    if (calibrator.isCalibrated()) startLoading();
+    else showOv('ov-display-cal');
   }
 };
-document.addEventListener('fullscreenchange', () => {
-  resizeCanvas();
-  btnFullscreen.textContent = document.fullscreenElement ? '✕ Exit Fullscreen' : '⛶ Fullscreen';
+
+function enterP1Mode() {
+  hideAllOv(); setState('P1_PREVIEW');
+  D('p1-controls').style.display = 'flex';
+  enforcer.reset();
+}
+
+D('p1-angle').oninput = e => { D('p1-angle-val').textContent = e.target.value + '°'; };
+D('p1-cpd').oninput   = e => { D('p1-cpd-val').textContent   = (+e.target.value).toFixed(1); };
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Monocular setup
+// ─────────────────────────────────────────────────────────────────────────────
+function goToMonocularSetup() {
+  D('p1-controls').style.display = 'none';
+  D('mono-eye-name').textContent = TEST_EYE.toUpperCase();
+  showOv('ov-monocular');
+  setState('MONOCULAR_SETUP');
+  enforcer.reset();
+}
+
+D('btn-mono-skip').onclick    = () => beginAxisSearch();
+D('btn-mono-confirm').onclick = () => beginAxisSearch();
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Axis search
+// ─────────────────────────────────────────────────────────────────────────────
+function beginAxisSearch() {
+  showOv('ov-axis-intro');
+  setState('AXIS_INTRO');
+}
+
+D('btn-axis-start').onclick = () => {
+  axisEngine = new AxisSearchEngine();
+  hideAllOv();
+  setState('AXIS');
+  axisStep = 0; // trigger first pair on next frame
+  showLabel(''); showMsg('');
+  setProgress('');
+};
+
+function startNextAxisPair() {
+  axisPair = axisEngine.nextPair();
+  if (!axisPair) return; // shouldn't happen
+  axisStep  = 1; // ready phase
+  stimStateT = performance.now();
+  showLabel('GET READY', '#888');
+  showMsg('');
+  const p = axisEngine.getProgress();
+  setProgress(`${p.done + 1} / ${p.total}`);
+  setDv('d-ax-pair', `${axisPair[0]}° vs ${axisPair[1]}°`);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// MDSF
+// ─────────────────────────────────────────────────────────────────────────────
+function beginMDSF(meridianNum) {
+  if (meridianNum === 1) {
+    mdsf1Axis  = foundAxis ?? 0;
+    mdsf2Axis  = (mdsf1Axis + 90) % 180;
+    staircase1 = new StaircaseEngine({ startCPD: 6 });
+    currentSC  = staircase1;
+    D('mdsf-intro-title').textContent  = 'Step 2 — Resolution Test (Meridian 1)';
+    D('mdsf-intro-note').textContent   = `Meridian: ${mdsf1Axis}° (detected axis)`;
+    setState('MDSF_INTRO_1');
+  } else {
+    staircase2 = new StaircaseEngine({ startCPD: 6 });
+    currentSC  = staircase2;
+    D('mdsf-intro-title').textContent  = 'Step 3 — Resolution Test (Meridian 2)';
+    D('mdsf-intro-note').textContent   = `Meridian: ${mdsf2Axis}° (perpendicular)`;
+    setState('MDSF_INTRO_2');
+  }
+  showOv('ov-mdsf-intro');
+}
+
+D('btn-mdsf-start').onclick = () => {
+  hideAllOv();
+  setState(appState === 'MDSF_INTRO_1' ? 'MDSF_1' : 'MDSF_2');
+  stimState  = 'ISI';
+  stimStateT = performance.now();
+  showLabel(''); showMsg('');
+  startMDSFTrial();
+};
+
+function startMDSFTrial() {
+  mdsfSide   = Math.random() < 0.5 ? 'left' : 'right';
+  stimState  = 'MDSF_ISI';
+  stimStateT = performance.now();
+  showLabel('');
+  showMsg('');
+  setProgress(`Reversals: ${currentSC.reversalCount} / ${currentSC.maxReversals}   Trials: ${currentSC.trialCount}`);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Key input
+// ─────────────────────────────────────────────────────────────────────────────
+document.addEventListener('keydown', e => {
+  // Axis response
+  if (appState === 'AXIS' && axisStep === 4) {
+    if (e.key === '1' || e.key === '2') {
+      axisEngine.recordResponse(+e.key);
+      if (axisEngine.isDone()) {
+        foundAxis = axisEngine.getFinalAxis();
+        session.axis = foundAxis;
+        showLabel(`AXIS: ${foundAxis}°`, '#00FF88');
+        showMsg('Axis found! Starting resolution test…', 2000);
+        setProgress('');
+        setTimeout(() => beginMDSF(1), 2200);
+        setState('AXIS_DONE');
+      } else {
+        axisStep = 0; // trigger next pair
+      }
+    }
+  }
+
+  // MDSF response
+  if ((appState === 'MDSF_1' || appState === 'MDSF_2') && stimState === 'MDSF_RESPONSE') {
+    let response = null;
+    if (e.key === 'ArrowLeft'  || e.key === '1') response = 'left';
+    if (e.key === 'ArrowRight' || e.key === '2') response = 'right';
+    if (!response) return;
+
+    const correct = response === mdsfSide;
+    currentSC.trial(correct);
+
+    // Feedback flash
+    stimState  = 'MDSF_FEEDBACK';
+    stimStateT = performance.now();
+    showLabel(correct ? '✓' : '✗', correct ? '#00FF88' : '#FF4444');
+    showMsg('');
+  }
 });
 
-// ── Boot ─────────────────────────────────────────────────────────────────────
-updateCalDisplay();
+// ─────────────────────────────────────────────────────────────────────────────
+// Results
+// ─────────────────────────────────────────────────────────────────────────────
+function showResults() {
+  setState('RESULTS');
+  const t1 = staircase1?.threshold() ?? 0;
+  const t2 = staircase2?.threshold() ?? 0;
+  session.mdsf1 = t1; session.mdsf2 = t2;
 
-// If already calibrated, skip straight to loading
+  D('r-axis').textContent      = `${foundAxis ?? '?'}°`;
+  D('r-axis-conf').textContent = axisEngine?.getProgress().done + ' comparisons';
+  D('r-mdsf1').textContent     = t1.toFixed(2) + ' CPD';
+  D('r-sn1').textContent       = `20/${StaircaseEngine.toSnellen(t1)}`;
+  D('r-mdsf2').textContent     = t2.toFixed(2) + ' CPD';
+  D('r-sn2').textContent       = `20/${StaircaseEngine.toSnellen(t2)}`;
+
+  const diff = Math.abs(t1 - t2);
+  const note = diff > 1.5
+    ? `⚠ ${diff.toFixed(1)} CPD difference between meridians — possible astigmatism.`
+    : `CPD difference: ${diff.toFixed(1)} (within normal range).`;
+  showMsg(note);
+  showOv('ov-results');
+}
+
+D('btn-restart').onclick = () => {
+  axisEngine = null; staircase1 = null; staircase2 = null;
+  foundAxis = null; mdsf1Result = null; mdsf2Result = null;
+  axisStep = 0; stimState = 'IDLE';
+  showLabel(''); showMsg(''); setProgress('');
+  smoother.reset(); enforcer.reset();
+  goToMonocularSetup();
+};
+D('btn-export').onclick = () => {
+  const blob = new Blob([JSON.stringify(session, null, 2)], { type:'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `astig_session_${Date.now()}.json`;
+  a.click();
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Debug toggle
+// ─────────────────────────────────────────────────────────────────────────────
+D('btn-debug-toggle').onclick = () => {
+  const p = D('debug-panel');
+  p.style.display = p.style.display === 'none' ? 'block' : 'none';
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// RENDER LOOP
+// ─────────────────────────────────────────────────────────────────────────────
+function renderLoop(timestamp) {
+  if (!running) return;
+  animId = requestAnimationFrame(renderLoop);
+  if (video.videoWidth === 0 || video.readyState < 2) return;
+
+  const vw = video.videoWidth, vh = video.videoHeight;
+  const now = performance.now();
+
+  // ── Fit canvas ─────────────────────────────────────────────────────────────
+  const wrap = canvas.parentElement;
+  if (canvas.width !== wrap.clientWidth || canvas.height !== wrap.clientHeight) {
+    canvas.width = wrap.clientWidth; canvas.height = wrap.clientHeight;
+  }
+
+  // ── MediaPipe detection ────────────────────────────────────────────────────
+  const fr = faceLandmarker.detectForVideo(video, timestamp);
+  const hr = handLandmarker.detectForVideo(video, timestamp);
+  const faceLms = (fr.faceLandmarks || [])[0] || null;
+  lastHands     = hr.landmarks || [];
+  lastHandedness = hr.handedness || [];
+  if (faceLms) lastFaceLms = faceLms;
+
+  // ── Distance ───────────────────────────────────────────────────────────────
+  let rawDist = null;
+  if (faceLms) {
+    const pd = computePD(faceLms, vw, vh);
+    rawDist = pd?.distCm ?? null;
+  }
+  const smoothedCm   = smoother.push(rawDist);
+  const correctedMm  = smoother.getCorrectedMm(calibrator.getScreenHeightMm() ?? 0);
+  const distMm       = correctedMm ?? (smoothedCm ? smoothedCm * 10 : 400);
+  const mmPerPx      = calibrator.mmPerPx ?? 0.18;
+
+  // ── Monocular enforcer (lenient version for astig test) ──────────────────
+  // Uses a larger radius, allows any hand gesture, and treats low EAR as cover.
+  let coverState = { left: null, right: null };
+  if (faceLms && faceLms[468] && faceLms[473]) {
+    const lIris = { x: faceLms[473].x * vw, y: faceLms[473].y * vh };
+    const rIris = { x: faceLms[468].x * vw, y: faceLms[468].y * vh };
+    const pd    = Math.hypot(rIris.x - lIris.x, rIris.y - lIris.y);
+    const R     = Math.max(50, pd * 1.2); // larger radius, any gesture
+
+    for (let i = 0; i < lastHands.length; i++) {
+      const hLms  = lastHands[i];
+      const label = (lastHandedness[i]?.[0]?.categoryName || 'Hand') + ' Hand';
+      let lc = 0, rc = 0;
+      for (const lm of hLms) {
+        const hx = lm.x * vw, hy = lm.y * vh;
+        if (Math.hypot(hx - lIris.x, hy - lIris.y) <= R) lc++;
+        if (Math.hypot(hx - rIris.x, hy - rIris.y) <= R) rc++;
+      }
+      if (lc >= 2 && !coverState.left)  coverState.left  = label;
+      if (rc >= 2 && !coverState.right) coverState.right = label;
+    }
+  }
+
+  // EAR fallback: if the target eye's EAR drops very low, treat as covered
+  const earL = faceLms ? computeEAR(faceLms, L_EAR_IDX) : 0.3;
+  const earR = faceLms ? computeEAR(faceLms, R_EAR_IDX) : 0.3;
+  if (!coverState.left  && earL < 0.18) coverState.left  = 'closed';
+  if (!coverState.right && earR < 0.18) coverState.right = 'closed';
+  const coverResult = enforcer.update(coverState, TEST_EYE, earL, earR);
+
+  // ── Update monocular overlay if active ────────────────────────────────────
+  if (appState === 'MONOCULAR_SETUP') {
+    const bar  = D('cover-bar');
+    const stat = D('cover-status');
+    bar.style.width = (coverResult.progress * 100) + '%';
+
+    // Show live EAR + hand state for debugging
+    const targetEar = TEST_EYE === 'right' ? earR : earL;
+    D('mono-ear').textContent  = faceLms ? targetEar.toFixed(2) : '—';
+    D('mono-hand').textContent = coverResult.coveredBy || 'none';
+
+    if (coverResult.ok) {
+      stat.textContent = '✓ COVERED';
+      stat.style.color = '#00FF88';
+      setState('MONOCULAR_OK');
+      setTimeout(beginAxisSearch, 400);
+    } else if (coverResult.progress > 0) {
+      stat.textContent = 'Hold steady…';
+      stat.style.color = '#FFD700';
+    } else {
+      if (!faceLms) {
+        stat.textContent = 'No face detected';
+        stat.style.color = '#FF4444';
+      } else {
+        stat.textContent = `Cover your ${TEST_EYE.toUpperCase()} eye`;
+        stat.style.color = '#aaa';
+      }
+    }
+
+    renderer.drawFixation();
+    updateDistBadge(smoothedCm);
+    updateDebugPanel(faceLms, smoothedCm, correctedMm, rawDist, null, null, null);
+    updateFPS(now);
+    return;
+  }
+
+  // ── P1 preview mode ────────────────────────────────────────────────────────
+  if (p1Mode) {
+    const angle = +D('p1-angle').value;
+    const cpd   = +D('p1-cpd').value;
+    const color = D('p1-color').value;
+    const type  = D('p1-type').value;
+    renderer.drawGrating({ angleDeg: angle, cpd, distMm, mmPerPx, color, fixationDot: true, type });
+    renderer.drawDebugOverlay({ cpd, distMm, mmPerPx, period: StimulusRenderer.periodPx(cpd, distMm, mmPerPx) });
+    updateDistBadge(smoothedCm);
+    updateDebugPanel(faceLms, smoothedCm, correctedMm, rawDist, null, null, null);
+    updateFPS(now);
+    return;
+  }
+
+  // ── AXIS SEARCH ────────────────────────────────────────────────────────────
+  if (appState === 'AXIS') {
+    const elapsed = now - stimStateT;
+
+    if (axisStep === 0) {
+      // Trigger next pair
+      startNextAxisPair();
+    } else if (axisStep === 1) {
+      // READY phase
+      renderer.drawFixation();
+      showLabel('GET READY', '#555');
+      if (elapsed > AXIS_READY_MS) { axisStep = 2; stimStateT = now; }
+
+    } else if (axisStep === 2) {
+      // Show A
+      renderer.drawGrating({ angleDeg: axisPair[0], cpd: AXIS_CPD, distMm, mmPerPx, color: '#0000FF', fixationDot: true, type: 'grating' });
+      showLabel('FIRST', '#44AAFF');
+      if (elapsed > AXIS_DUR_MS) { axisStep = 3; stimStateT = now; }
+
+    } else if (axisStep === 3) {
+      // ISI
+      renderer.drawFixation();
+      showLabel('');
+      if (elapsed > AXIS_ISI_MS) { axisStep = 4; stimStateT = now; showLabel('SECOND', '#FF8800');
+        renderer.drawGrating({ angleDeg: axisPair[1], cpd: AXIS_CPD, distMm, mmPerPx, color: '#0000FF', fixationDot: true, type: 'grating' }); }
+
+    } else if (axisStep === 4) {
+      // Show B or waiting for response
+      if (elapsed < AXIS_DUR_MS) {
+        renderer.drawGrating({ angleDeg: axisPair[1], cpd: AXIS_CPD, distMm, mmPerPx, color: '#0000FF', fixationDot: true, type: 'grating' });
+        showLabel('SECOND', '#FF8800');
+      } else {
+        renderer.drawFixation();
+        showLabel('');
+        showMsg('Which was SHARPER?  Press  1 (first)  or  2 (second)');
+      }
+      // Response handled by keydown listener — sets axisStep = 0 on answer
+    }
+
+    updateDistBadge(smoothedCm);
+    updateDebugPanel(faceLms, smoothedCm, correctedMm, rawDist, axisEngine, currentSC, axisPair);
+    updateFPS(now);
+    return;
+  }
+
+  // ── MDSF ──────────────────────────────────────────────────────────────────
+  if (appState === 'MDSF_1' || appState === 'MDSF_2') {
+    const elapsed = now - stimStateT;
+    const sc      = currentSC;
+    const axis    = appState === 'MDSF_1' ? mdsf1Axis : mdsf2Axis;
+
+    if (stimState === 'MDSF_ISI') {
+      renderer.drawFixation();
+      if (elapsed > MDSF_ISI_MS) { stimState = 'MDSF_SHOW'; stimStateT = now; }
+
+    } else if (stimState === 'MDSF_SHOW') {
+      // Draw grating clipped to left or right half
+      const ctx = canvas.getContext('2d');
+      const W = canvas.width, H = canvas.height;
+      ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H);
+      ctx.save();
+      ctx.beginPath();
+      if (mdsfSide === 'left') ctx.rect(0, 0, W / 2, H);
+      else                     ctx.rect(W / 2, 0, W / 2, H);
+      ctx.clip();
+      renderer.drawGrating({ angleDeg: axis, cpd: sc.currentCPD, distMm, mmPerPx, color: '#FF0000', fixationDot: false, type: 'grating' });
+      ctx.restore();
+      // Draw center divider line
+      ctx.strokeStyle = '#111'; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(W/2, 0); ctx.lineTo(W/2, H); ctx.stroke();
+      // Fixation cross on top
+      ctx.strokeStyle = '#444'; ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(W/2-10, H/2); ctx.lineTo(W/2+10, H/2);
+      ctx.moveTo(W/2, H/2-10); ctx.lineTo(W/2, H/2+10);
+      ctx.stroke();
+      if (elapsed > MDSF_DUR_MS) { stimState = 'MDSF_RESPONSE'; stimStateT = now; }
+
+    } else if (stimState === 'MDSF_RESPONSE') {
+      renderer.drawFixation();
+      showMsg('← Left   or   Right →');
+
+    } else if (stimState === 'MDSF_FEEDBACK') {
+      renderer.drawFixation();
+      if (elapsed > MDSF_FB_MS) {
+        showLabel('');
+        if (sc.isDone()) {
+          // Staircase complete
+          const thr = sc.threshold();
+          if (appState === 'MDSF_1') {
+            mdsf1Result = thr;
+            showLabel(`Meridian 1: ${thr.toFixed(1)} CPD`, '#00FF88');
+            setTimeout(() => { showLabel(''); beginMDSF(2); }, 2000);
+            setState('MDSF_1_DONE');
+          } else {
+            mdsf2Result = thr;
+            showLabel(`Meridian 2: ${thr.toFixed(1)} CPD`, '#00FF88');
+            setTimeout(showResults, 2000);
+            setState('MDSF_2_DONE');
+          }
+        } else {
+          startMDSFTrial();
+        }
+      }
+    }
+
+    updateDistBadge(smoothedCm);
+    updateDebugPanel(faceLms, smoothedCm, correctedMm, rawDist, axisEngine, sc, null);
+    updateFPS(now);
+    return;
+  }
+
+  // Default: draw fixation for any other state
+  renderer.drawFixation();
+  updateDistBadge(smoothedCm);
+  updateDebugPanel(faceLms, smoothedCm, correctedMm, rawDist, null, null, null);
+  updateFPS(now);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Debug helpers
+// ─────────────────────────────────────────────────────────────────────────────
+function updateDistBadge(smoothedCm) {
+  const b = D('dist-badge');
+  if (smoother.isValid()) {
+    b.textContent = `${smoothedCm.toFixed(0)} cm`;
+    b.className = +smoothedCm < 25 || +smoothedCm > 150 ? 'warn' : 'ok';
+  } else {
+    b.textContent = lastFaceLms ? '…' : 'No face';
+    b.className = 'err';
+  }
+}
+
+function updateDebugPanel(faceLms, smoothedCm, correctedMm, rawDist, ae, sc, pair) {
+  setDv('d-face',   faceLms  ? '✓' : '—', faceLms ? 'ok' : 'err');
+  setDv('d-raw',    rawDist  ? `${rawDist.toFixed(1)} cm` : '—');
+  setDv('d-sm',     smoothedCm ? `${smoothedCm.toFixed(1)} cm` : '—');
+  setDv('d-cor',    correctedMm ? `${(correctedMm/10).toFixed(1)} cm` : '—');
+  const mmPerPx     = calibrator.mmPerPx ?? 0.18;
+  const distMm      = correctedMm ?? (smoothedCm ? smoothedCm*10 : 400);
+  setDv('d-maxcpd', StimulusRenderer.maxCPD(distMm, mmPerPx).toFixed(1));
+  if (ae) {
+    const p = ae.getProgress();
+    setDv('d-ax-prog', `${p.done}/${p.total}`);
+    setDv('d-ax-pair', pair ? `${pair[0]}° vs ${pair[1]}°` : '—');
+  }
+  if (sc) {
+    setDv('d-sc-rev', sc.reversalCount);
+    setDv('d-sc-tri', sc.trialCount);
+    setDv('d-sc-cpd', sc.currentCPD.toFixed(2));
+  }
+}
+
+function updateFPS(now) {
+  frameCount++;
+  if (now - lastFpsT >= 1000) { fps = frameCount; frameCount = 0; lastFpsT = now; }
+  setDv('d-fps', fps);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Boot
+// ─────────────────────────────────────────────────────────────────────────────
+updateDebugCal();
 if (calibrator.isCalibrated()) {
   startLoading();
 } else {
-  ovDisplayCal.classList.remove('hidden');
+  showOv('ov-display-cal');
 }
 </script>
 </body>
