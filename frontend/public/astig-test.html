@@ -307,6 +307,7 @@
   <!-- ═══ OVERLAY: Far-point instructions (shown before grating appears) ═══ -->
   <div class="ov hidden" id="ov-farpoint">
     <h2 id="fp-title">Far Point — <span class="accent">Meridian 1</span></h2>
+    <div id="fp-eye" style="font-size:13px;color:rgba(255,255,255,0.45);margin-bottom:8px;text-transform:capitalize;"></div>
     <div class="stage-why">
       <div><span class="why-label">Measures</span> The farthest distance your eye can still focus clearly</div>
       <div><span class="why-label">Why</span> Your far point distance converts to diopters (P = −1000 ÷ cm) — this gives the sphere power of your prescription; measuring two meridians captures any astigmatism</div>
@@ -1797,12 +1798,6 @@ function renderLoop(ts) {
     // Blur from defocus — not the angular size — is what makes lines vanish.
     const fpRefDist = axisCheckDistanceMm > 0 ? axisCheckDistanceMm : 400;
     renderer.drawCircleGrating({ angleDeg: axisAngle, cpd: fpTargetCPD, distMm: fpRefDist, mmPerPx, color: fpColor, fixationDot: true });
-    // "Slowly move away" instruction on canvas
-    ctx.font         = `bold ${Math.max(16, Math.min(W, H) * 0.05)}px sans-serif`;
-    ctx.textAlign    = 'center';
-    ctx.textBaseline = 'top';
-    ctx.fillStyle    = '#fff';
-    ctx.fillText('Slowly move away — tap Lock in when lines blur', W / 2, 10);
     // Update distance counter and face-tracking badge
     if (smoother.isValid()) {
       D('fp-dist').textContent = `${(distMm / 10).toFixed(0)} cm`;
