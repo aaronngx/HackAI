@@ -2,6 +2,7 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import DoctorModal from "./DoctorModal.jsx";
+import EyeDiseaseClassifierPanel from "./EyeDiseaseClassifierPanel.jsx";
 
 const panels = [
   { title: "Eye Disease Detect" },
@@ -27,7 +28,6 @@ function PlaceholderContent({ title, desc, icon }) {
 }
 
 const panelContent = {
-  0: <PlaceholderContent title="Eye Disease Detect" desc="AI-powered detection of retinal conditions, cataracts, glaucoma and more from fundus images." icon="👁️" />,
   1: <PlaceholderContent title="Eyes Exam" desc="Comprehensive virtual eye exam powered by computer vision. Check visual acuity, colour blindness and more." icon="🔬" />,
   2: <PlaceholderContent title="Report" desc="View your full diagnostic history, export PDF reports and share results directly with your doctor." icon="📋" />,
 };
@@ -88,7 +88,9 @@ export default function PanelOverlay({ panelIndex, originRect, onClose }) {
         </motion.div>
 
         <div style={{ flex: 1, overflow: "hidden" }}>
-          {panelIndex === 3 ? (
+          {panelIndex === 0 ? (
+            <EyeDiseaseClassifierPanel onBack={onClose} />
+          ) : panelIndex === 3 ? (
             <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100%" }}>
               <motion.button
                 whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.97 }}
