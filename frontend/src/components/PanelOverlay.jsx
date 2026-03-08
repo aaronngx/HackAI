@@ -2,6 +2,7 @@
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import DoctorModal from "./DoctorModal.jsx";
+import EyeDiseaseClassifierPanel from "./EyeDiseaseClassifierPanel.jsx";
 
 const panels = [
   { title: "Eye Disease Detect" },
@@ -28,38 +29,12 @@ function ActionButton({ children, onClick, style = {} }) {
   );
 }
 
-// ── 0: Eye Disease Detect ─────────────────────────────────────────────────────
-function EyeDiseasePanel() {
-  return (
-    <div style={{ display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center",
-      height:"100%", gap:24, padding:"0 40px", textAlign:"center" }}>
-      <div style={{ fontSize:72 }}>👁️</div>
-      <h2 style={{ color:"#fff", fontSize:"clamp(28px,4vw,52px)", fontWeight:700, margin:0 }}>
-        Eye Disease Detection
-      </h2>
-      <p style={{ color:"#aaa", fontSize:"clamp(14px,1.8vw,18px)", lineHeight:1.7, maxWidth:560, margin:0 }}>
-        Upload a fundus image or retinal scan. Our AI model screens for diabetic retinopathy,
-        glaucoma, macular degeneration and cataracts in seconds.
-      </p>
-      <div style={{ display:"flex", gap:12, flexWrap:"wrap", justifyContent:"center", marginTop:8 }}>
-        {["Diabetic Retinopathy","Glaucoma","Cataracts","Macular Degeneration"].map(d => (
-          <span key={d} style={{ background:"rgba(255,255,255,0.08)", border:"1px solid rgba(255,255,255,0.15)",
-            borderRadius:8, padding:"6px 14px", fontSize:12, color:"#ccc", fontWeight:500 }}>{d}</span>
-        ))}
-      </div>
-      <p style={{ color:"#555", fontSize:12, maxWidth:400, margin:0 }}>
-        Coming soon — image-upload pipeline in development.
-      </p>
-    </div>
-  );
-}
-
 // ── 1: Eyes Exam ──────────────────────────────────────────────────────────────
 function EyesExamPanel() {
   const steps = [
     { icon:"🖥️", label:"Calibrate display" },
     { icon:"🤚", label:"Cover one eye" },
-    { icon:"〰️", label:"Axis search (~2 min)" },
+    { icon:"〰️", label:"Axis search (~6 trials)" },
     { icon:"🔬", label:"Resolution staircase" },
     { icon:"↔️", label:"Far-point walk-back" },
     { icon:"📊", label:"Refraction estimate" },
@@ -84,11 +59,11 @@ function EyesExamPanel() {
           </div>
         ))}
       </div>
-      <ActionButton onClick={() => { window.location.href = '/astig-test.html'; }}>
+      <ActionButton onClick={() => { window.location.href = '/astig'; }}>
         Start Exam →
       </ActionButton>
       <p style={{ color:"#555", fontSize:12, maxWidth:400, margin:0 }}>
-        Takes ~8 minutes · No special equipment · Webcam required
+        Takes ~1 minute per eye · No special equipment · Webcam required
       </p>
     </div>
   );
@@ -138,7 +113,7 @@ function ReportPanel() {
       <div style={{ fontSize:64 }}>📋</div>
       <h2 style={{ color:"#fff", fontSize:28, fontWeight:700, margin:0 }}>No exams yet</h2>
       <p>Complete your first screening to see results here.</p>
-      <ActionButton onClick={() => { window.location.href = "/astig-test.html"; }}>
+      <ActionButton onClick={() => { window.location.href = "/astig"; }}>
         Take Exam Now →
       </ActionButton>
     </div>
@@ -187,7 +162,7 @@ function ExamCard({ exam }) {
           {ref && (
             <span style={{ background:"rgba(0,255,136,0.1)", border:"1px solid rgba(0,255,136,0.3)",
               borderRadius:8, padding:"4px 10px", fontSize:12, color:"#00FF88", fontWeight:600 }}>
-              SPH −{ref.sph}D / CYL −{ref.cyl}D
+              SPH {ref.sph}D / CYL {ref.cyl}D
             </span>
           )}
           <span style={{ color:"#444", fontSize:16 }}>{open ? "▲" : "▼"}</span>
@@ -213,8 +188,8 @@ function ExamCard({ exam }) {
                 ["Snellen 2", `20/${exam.sn2}`],
                 ["Far-Point 1", exam.fp1Mm ? `${(exam.fp1Mm/10).toFixed(1)} cm` : "skipped"],
                 ["Far-Point 2", exam.fp2Mm ? `${(exam.fp2Mm/10).toFixed(1)} cm` : "skipped"],
-                ref && ["SPH", `−${ref.sph} D`],
-                ref && ["CYL", `−${ref.cyl} D`],
+                ref && ["SPH", `${ref.sph} D`],
+                ref && ["CYL", `${ref.cyl} D`],
                 ref && ["AXIS", `${ref.axis}°`],
               ].filter(Boolean).map(([label, val]) => (
                 <div key={label} style={{ background:"rgba(255,255,255,0.05)", borderRadius:8,
@@ -236,35 +211,32 @@ function ExamCard({ exam }) {
 
 // ── Main overlay ──────────────────────────────────────────────────────────────
 export default function PanelOverlay({ panelIndex, originRect, onClose }) {
-  const [doctorOpen, setDoctorOpen] = useState(false);
+  if (panelIndex === 3) {
+    return <DoctorModal onClose={onClose} />;
+  }
 
   const from = originRect
     ? { top: originRect.top, left: originRect.left, width: originRect.width, height: originRect.height, borderRadius: 32 }
     : { top: "50%", left: "50%", width: 0, height: 0, borderRadius: 32 };
 
   const content = {
-    0: <EyeDiseasePanel />,
+    0: <EyeDiseaseClassifierPanel onBack={onClose} />,
     1: <EyesExamPanel />,
     2: <ReportPanel />,
-    3: (
-      <div style={{ display:"flex", alignItems:"center", justifyContent:"center", height:"100%" }}>
-        <ActionButton onClick={() => setDoctorOpen(true)}>Open Doctor Finder</ActionButton>
-      </div>
-    ),
   };
 
   return (
-    <>
-      <motion.div
-        key={panelIndex}
-        initial={{ ...from, opacity: 0.6 }}
-        animate={{ top: 0, left: 0, width: "100vw", height: "100vh", borderRadius: 0, opacity: 1 }}
-        exit={{ ...from, opacity: 0 }}
-        transition={{ duration: 0.45, ease: [0.32, 0.72, 0, 1] }}
-        style={{ position:"fixed", zIndex:150, background:"#0a0a0a",
-          display:"flex", flexDirection:"column", overflow:"hidden" }}
-      >
-        {/* Header */}
+    <motion.div
+      key={panelIndex}
+      initial={{ ...from, opacity: 0.6 }}
+      animate={{ top: 0, left: 0, width: "100vw", height: "100vh", borderRadius: 0, opacity: 1 }}
+      exit={{ ...from, opacity: 0 }}
+      transition={{ duration: 0.45, ease: [0.32, 0.72, 0, 1] }}
+      style={{ position:"fixed", zIndex:150, background:"#0a0a0a",
+        display:"flex", flexDirection:"column", overflow:"hidden" }}
+    >
+      {/* Header — hidden for panel 0 since EyeDiseaseClassifierPanel has its own back button */}
+      {panelIndex !== 0 && (
         <motion.div
           initial={{ opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}
@@ -285,15 +257,11 @@ export default function PanelOverlay({ panelIndex, originRect, onClose }) {
           </motion.button>
           <span style={{ color:"#666", fontSize:13 }}>{panels[panelIndex]?.title}</span>
         </motion.div>
+      )}
 
-        <div style={{ flex:1, overflow:"hidden" }}>
-          {content[panelIndex]}
-        </div>
-      </motion.div>
-
-      <AnimatePresence>
-        {doctorOpen && <DoctorModal onClose={() => setDoctorOpen(false)} />}
-      </AnimatePresence>
-    </>
+      <div style={{ flex:1, overflow:"hidden" }}>
+        {content[panelIndex]}
+      </div>
+    </motion.div>
   );
 }

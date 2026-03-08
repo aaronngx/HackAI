@@ -2,6 +2,21 @@ import crypto from "node:crypto";
 import { NextResponse } from "next/server";
 import { ensureUsersCollection, USERS_COLLECTION } from "@/lib/users";
 
+const VISION_CORRECTION_OPTIONS = new Set([
+  "glasses",
+  "contacts",
+  "neither",
+  "both",
+  "not sure",
+]);
+
+const EYE_CONDITION_OPTIONS = new Set([
+  "myopia",
+  "atigmatism",
+  "dry eyes",
+  "other",
+]);
+
 function normalizeText(value) {
   return String(value || "").trim();
 }
@@ -24,6 +39,11 @@ export async function POST(request) {
     let lastName = normalizeText(payload.lastName);
     const email = normalizeText(payload.email).toLowerCase();
     const password = String(payload.password || "");
+    const age = Number(payload.age);
+    const visionCorrection = normalizeText(payload.visionCorrection).toLowerCase();
+    const eyeConditions = Array.isArray(payload.eyeConditions)
+      ? payload.eyeConditions.map((item) => normalizeText(item).toLowerCase()).filter(Boolean)
+      : [];
 
     if ((!firstName || !lastName) && fullName) {
       const parts = fullName.split(/\s+/).filter(Boolean);
@@ -43,6 +63,31 @@ export async function POST(request) {
       return NextResponse.json({ success: false, error: "Password must be at least 8 characters." }, { status: 400 });
     }
 
+    if (!Number.isFinite(age) || age < 1 || age > 120) {
+      return NextResponse.json({ success: false, error: "Age must be between 1 and 120." }, { status: 400 });
+    }
+
+    if (!VISION_CORRECTION_OPTIONS.has(visionCorrection)) {
+      return NextResponse.json(
+        { success: false, error: "Please select a valid glasses/contacts option." },
+        { status: 400 }
+      );
+    }
+
+    if (!eyeConditions.length) {
+      return NextResponse.json(
+        { success: false, error: "Please select at least one known eye condition." },
+        { status: 400 }
+      );
+    }
+
+    if (eyeConditions.some((condition) => !EYE_CONDITION_OPTIONS.has(condition))) {
+      return NextResponse.json(
+        { success: false, error: "Invalid eye condition option selected." },
+        { status: 400 }
+      );
+    }
+
     const users = await ensureUsersCollection();
     const now = new Date();
     const { passwordHash, passwordSalt } = hashPassword(password);
@@ -53,6 +98,9 @@ export async function POST(request) {
       email,
       passwordHash,
       passwordSalt,
+      age,
+      visionCorrection,
+      eyeConditions,
       createdAt: now,
       updatedAt: now,
     });
@@ -67,6 +115,9 @@ export async function POST(request) {
           firstName,
           lastName,
           email,
+          age,
+          visionCorrection,
+          eyeConditions,
         },
       },
       { status: 201 }
