@@ -1,7 +1,7 @@
 "use client";
-import { useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import DoctorModal from "./DoctorModal.jsx";
+import EyeDiseaseClassifierPanel from "./EyeDiseaseClassifierPanel.jsx";
 
 const panels = [
   { title: "Eye Disease Detect" },
@@ -10,9 +10,28 @@ const panels = [
   { title: "Doctor Find" },
 ];
 
-function PlaceholderContent({ title, desc, icon }) {
+function PlaceholderContent({ title, desc, icon, onBack }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100%", gap: 24, padding: "0 40px", textAlign: "center" }}>
+      <motion.button
+        whileHover={{ scale: 1.04 }}
+        whileTap={{ scale: 0.96 }}
+        onClick={onBack}
+        style={{
+          alignSelf: "flex-start",
+          marginBottom: 8,
+          border: "1px solid rgba(255,255,255,0.2)",
+          borderRadius: 10,
+          background: "rgba(255,255,255,0.08)",
+          color: "#fff",
+          padding: "8px 14px",
+          fontSize: 13,
+          fontWeight: 600,
+          cursor: "pointer",
+        }}
+      >
+        ← Back
+      </motion.button>
       <div style={{ fontSize: 72 }}>{icon}</div>
       <h2 style={{ color: "#fff", fontSize: "clamp(28px, 4vw, 56px)", fontWeight: 700, margin: 0, letterSpacing: "-0.02em" }}>{title}</h2>
       <p style={{ color: "#aaa", fontSize: "clamp(15px, 2vw, 20px)", lineHeight: 1.7, maxWidth: 560, margin: 0 }}>{desc}</p>
@@ -27,13 +46,14 @@ function PlaceholderContent({ title, desc, icon }) {
 }
 
 const panelContent = {
-  0: <PlaceholderContent title="Eye Disease Detect" desc="AI-powered detection of retinal conditions, cataracts, glaucoma and more from fundus images." icon="👁️" />,
-  1: <PlaceholderContent title="Eyes Exam" desc="Comprehensive virtual eye exam powered by computer vision. Check visual acuity, colour blindness and more." icon="🔬" />,
-  2: <PlaceholderContent title="Report" desc="View your full diagnostic history, export PDF reports and share results directly with your doctor." icon="📋" />,
+  1: (onBack) => <PlaceholderContent title="Eyes Exam" desc="Comprehensive virtual eye exam powered by computer vision. Check visual acuity, colour blindness and more." icon="🔬" onBack={onBack} />,
+  2: (onBack) => <PlaceholderContent title="Report" desc="View your full diagnostic history, export PDF reports and share results directly with your doctor." icon="📋" onBack={onBack} />,
 };
 
 export default function PanelOverlay({ panelIndex, originRect, onClose }) {
-  const [doctorOpen, setDoctorOpen] = useState(false);
+  if (panelIndex === 3) {
+    return <DoctorModal onClose={onClose} />;
+  }
 
   const from = originRect
     ? { top: originRect.top, left: originRect.left, width: originRect.width, height: originRect.height, borderRadius: 32 }
@@ -88,23 +108,11 @@ export default function PanelOverlay({ panelIndex, originRect, onClose }) {
         </motion.div>
 
         <div style={{ flex: 1, overflow: "hidden" }}>
-          {panelIndex === 3 ? (
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100%" }}>
-              <motion.button
-                whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.97 }}
-                onClick={() => setDoctorOpen(true)}
-                style={{ padding: "14px 36px", background: "#fff", color: "#000", border: "none", borderRadius: 14, fontSize: 15, fontWeight: 700, cursor: "pointer" }}
-              >
-                Open Doctor Finder
-              </motion.button>
-            </div>
-          ) : panelContent[panelIndex]}
+          {panelIndex === 0 ? (
+            <EyeDiseaseClassifierPanel onBack={onClose} />
+          ) : panelContent[panelIndex]?.(onClose)}
         </div>
       </motion.div>
-
-      <AnimatePresence>
-        {doctorOpen && <DoctorModal onClose={() => setDoctorOpen(false)} />}
-      </AnimatePresence>
     </>
   );
 }
