@@ -29,8 +29,28 @@ function ActionButton({ children, onClick, style = {} }) {
   );
 }
 
+// ── Iris TTS helper ───────────────────────────────────────────────────────────
+async function speakIris(text) {
+  try {
+    const res = await fetch("/api/tts", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text }),
+    });
+    if (!res.ok) return;
+    const buf = await res.arrayBuffer();
+    const url = URL.createObjectURL(new Blob([buf], { type: "audio/mpeg" }));
+    const audio = new Audio(url);
+    audio.onended = () => URL.revokeObjectURL(url);
+    await audio.play();
+  } catch { /* silently ignore TTS errors */ }
+}
+
 // ── 1: Eyes Exam ──────────────────────────────────────────────────────────────
 function EyesExamPanel() {
+  const [consented, setConsented] = useState(null); // null=deciding, true=allowed, false=skipped
+  const [introPlaying, setIntroPlaying] = useState(false);
+
   const steps = [
     { icon:"🖥️", label:"Calibrate display" },
     { icon:"🤚", label:"Cover one eye" },
@@ -39,9 +59,127 @@ function EyesExamPanel() {
     { icon:"↔️", label:"Far-point walk-back" },
     { icon:"📊", label:"Refraction estimate" },
   ];
+
+  const handleAllow = async () => {
+    localStorage.setItem("irisGuidanceEnabled", "true");
+    setConsented(true);
+    setIntroPlaying(true);
+    await speakIris(
+      "Hi, I'm Iris! I'll guide you through your astigmatism screening step by step. " +
+      "This test takes about one minute per eye and uses your webcam. " +
+      "You'll need a quiet, well-lit space. " +
+      "When you're ready, click Start Exam and I'll walk you through each phase."
+    );
+    setIntroPlaying(false);
+  };
+
+  const handleSkip = () => {
+    localStorage.setItem("irisGuidanceEnabled", "false");
+    setConsented(false);
+  };
+
+  // Consent modal
+  if (consented === null) {
+    return (
+      <div style={{ display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center",
+        height:"100%", gap:0, padding:"0 40px", textAlign:"center" }}>
+
+        {/* Iris avatar */}
+        <motion.div
+          initial={{ scale: 0.7, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          transition={{ duration: 0.5, ease: "easeOut" }}
+          style={{ width:96, height:96, borderRadius:"50%",
+            background:"rgba(0,196,212,0.12)", border:"2px solid rgba(0,196,212,0.4)",
+            display:"flex", alignItems:"center", justifyContent:"center", marginBottom:28 }}
+        >
+          <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="#00c4d4" strokeWidth="1.4">
+            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+            <circle cx="12" cy="12" r="3"/>
+          </svg>
+        </motion.div>
+
+        <motion.h2
+          initial={{ opacity:0, y:12 }}
+          animate={{ opacity:1, y:0 }}
+          transition={{ delay:0.15, duration:0.4 }}
+          style={{ color:"#fff", fontSize:"clamp(22px,3vw,38px)", fontWeight:700, margin:"0 0 12px" }}
+        >
+          Would you like Iris to guide you?
+        </motion.h2>
+
+        <motion.p
+          initial={{ opacity:0, y:10 }}
+          animate={{ opacity:1, y:0 }}
+          transition={{ delay:0.25, duration:0.4 }}
+          style={{ color:"#aaa", fontSize:"clamp(13px,1.6vw,17px)", lineHeight:1.7,
+            maxWidth:480, margin:"0 0 36px" }}
+        >
+          Iris can narrate each step of your eye screening — explaining what you'll see
+          and what to do — so you always know exactly what's happening.
+        </motion.p>
+
+        <motion.div
+          initial={{ opacity:0, y:10 }}
+          animate={{ opacity:1, y:0 }}
+          transition={{ delay:0.35, duration:0.4 }}
+          style={{ display:"flex", gap:16, flexWrap:"wrap", justifyContent:"center" }}
+        >
+          <motion.button
+            whileHover={{ scale:1.04 }} whileTap={{ scale:0.96 }}
+            onClick={handleAllow}
+            style={{ padding:"14px 36px", background:"linear-gradient(135deg,#00c4d4,#0090a0)",
+              color:"#fff", border:"none", borderRadius:14, fontSize:16, fontWeight:700,
+              cursor:"pointer", display:"flex", alignItems:"center", gap:10 }}
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2">
+              <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
+              <path d="M15.54 8.46a5 5 0 010 7.07"/>
+              <path d="M19.07 4.93a10 10 0 010 14.14"/>
+            </svg>
+            Allow Iris to Guide Me
+          </motion.button>
+
+          <motion.button
+            whileHover={{ scale:1.04 }} whileTap={{ scale:0.96 }}
+            onClick={handleSkip}
+            style={{ padding:"14px 36px", background:"rgba(255,255,255,0.07)",
+              color:"#888", border:"1px solid rgba(255,255,255,0.12)",
+              borderRadius:14, fontSize:15, fontWeight:600, cursor:"pointer" }}
+          >
+            Skip, just start
+          </motion.button>
+        </motion.div>
+      </div>
+    );
+  }
+
+  // Main panel — shown after consent decision
   return (
     <div style={{ display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center",
       height:"100%", gap:28, padding:"0 40px", textAlign:"center" }}>
+
+      {/* Iris intro playing indicator */}
+      <AnimatePresence>
+        {introPlaying && (
+          <motion.div
+            initial={{ opacity:0, y:-10 }}
+            animate={{ opacity:1, y:0 }}
+            exit={{ opacity:0, y:-10 }}
+            style={{ position:"absolute", top:80, left:"50%", transform:"translateX(-50%)",
+              background:"rgba(0,196,212,0.12)", border:"1px solid rgba(0,196,212,0.3)",
+              borderRadius:12, padding:"10px 20px", display:"flex", alignItems:"center", gap:10 }}
+          >
+            <motion.div
+              animate={{ scale:[1,1.3,1] }}
+              transition={{ repeat:Infinity, duration:0.8 }}
+              style={{ width:8, height:8, borderRadius:"50%", background:"#00c4d4" }}
+            />
+            <span style={{ color:"#00c4d4", fontSize:13, fontWeight:600 }}>Iris is speaking…</span>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       <div style={{ fontSize:72 }}>🔬</div>
       <h2 style={{ color:"#fff", fontSize:"clamp(28px,4vw,52px)", fontWeight:700, margin:0 }}>
         Astigmatism Screening
