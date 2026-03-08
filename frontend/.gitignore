@@ -20,6 +20,9 @@
 # production
 /build
 
+# scraped clinic data (regenerated on ZIP search)
+/data
+
 # misc
 .DS_Store
 *.pem

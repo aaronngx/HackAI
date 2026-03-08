@@ -512,7 +512,7 @@ export default function DoctorModal({ onClose }) {
       style={{
         position: "fixed",
         inset: 0,
-        background: "rgba(0,0,0,0.7)",
+        background: "rgba(8,14,26,0.72)",
         zIndex: 200,
         display: "flex",
         alignItems: "center",
@@ -522,33 +522,68 @@ export default function DoctorModal({ onClose }) {
       }}
     >
       <motion.div
-        initial={{ opacity: 0, scale: 0.95, y: 24 }}
+        initial={{ opacity: 0, scale: 0.96, y: 16 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
-        exit={{ opacity: 0, scale: 0.95, y: 24 }}
+        exit={{ opacity: 0, scale: 0.96, y: 16 }}
         transition={{ type: "spring", stiffness: 320, damping: 32, mass: 0.9 }}
         onClick={(e) => e.stopPropagation()}
         style={{
-          background: "#f0f0f0",
-          borderRadius: 24,
+          background: "#f0f5fb",
+          borderRadius: 20,
           width: "min(1100px, 95vw)",
           height: "min(700px, 90vh)",
           display: "flex",
           flexDirection: "column",
           overflow: "hidden",
+          boxShadow: "0 24px 64px rgba(0,0,0,0.28)",
         }}
       >
         <div style={{
-          display: "flex", justifyContent: "space-between", alignItems: "center",
-          padding: "16px 24px", borderBottom: "1px solid rgba(0,0,0,0.08)",
-          background: "#fff", flexShrink: 0,
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          padding: "16px 28px",
+          borderBottom: "1px solid #1e2d45",
+          background: "#0d1526",
+          position: "relative",
         }}>
-          <div>
-            <h2 style={{ margin: 0, fontSize: 20, fontWeight: 700, color: "#111" }}>Find a Doctor</h2>
-            <p style={{ margin: "2px 0 0", fontSize: 12, color: "#888" }}>Eye care specialists near you</p>
+          <div style={{ position: "absolute", right: 32, top: -12, fontFamily: "'Bebas Neue'", fontSize: 140, color: "rgba(255,255,255,0.03)", lineHeight: 1, userSelect: "none" }}>
+            IRIS
           </div>
-          <motion.button whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }} onClick={onClose}
-            style={{ background: "#e0e0e0", border: "none", borderRadius: "50%", width: 34, height: 34, cursor: "pointer", fontSize: 20, display: "flex", alignItems: "center", justifyContent: "center", color: "#111" }}>
-            ×
+          <div style={{ position: "relative", zIndex: 1 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#00c4d4" strokeWidth="1.5">
+                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" />
+              </svg>
+              <span style={{ fontFamily: "'Bebas Neue'", fontSize: 20, letterSpacing: 4, color: "#f5f2ee" }}>IRIS</span>
+              <span style={{ fontFamily: "'DM Mono'", fontSize: 10, color: "rgba(255,255,255,0.5)", letterSpacing: 1 }}>DOCTOR FINDER</span>
+            </div>
+            <div style={{ fontFamily: "'Instrument Serif'", fontSize: 26, color: "#f5f2ee", lineHeight: 1.2 }}>
+              Find an eye doctor near you
+            </div>
+          </div>
+          <motion.button
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            onClick={onClose}
+            style={{
+              position: "relative",
+              zIndex: 1,
+              background: "rgba(255,255,255,0.08)",
+              border: "1px solid rgba(255,255,255,0.25)",
+              borderRadius: 999,
+              padding: "6px 14px",
+              color: "#f5f2ee",
+              fontSize: 12,
+              fontFamily: "'DM Mono'",
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
+            }}
+          >
+            <span>Close</span>
+            <span style={{ fontSize: 16 }}>×</span>
           </motion.button>
         </div>
 

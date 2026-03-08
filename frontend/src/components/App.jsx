@@ -1,12 +1,12 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { useRouter } from "next/navigation";
 import Starsfield from "./Starsfield.js";
 import PanelOverlay from "./PanelOverlay.jsx";
 import AppleHelloEffect from "./AppleHelloEffect.js";
 import LoginPanelOverlay from "./LoginPanelOverlay.jsx";
 import SignupPanelOverlay from "./SignupPanelOverlay.jsx";
+import DoctorModal from "./DoctorModal.jsx";
 
 const logo = "/logo.png";
 const utd = "/utd.png";
@@ -90,7 +90,6 @@ function FeatureCard({ card, onClick }) {
 }
 
 export default function App() {
-  const router = useRouter();
   const [clicked, setClicked] = useState(false);
   const [activePanelIndex, setActivePanelIndex] = useState(null);
   const [originRect, setOriginRect] = useState(null);
@@ -98,16 +97,21 @@ export default function App() {
   const [signupPanelOpen, setSignupPanelOpen] = useState(false);
   const [loginOriginRect, setLoginOriginRect] = useState(null);
   const [signupOriginRect, setSignupOriginRect] = useState(null);
-  const [user, setUser] = useState(() => {
-    if (typeof window === "undefined") return null;
+  const [doctorModalOpen, setDoctorModalOpen] = useState(false);
+  const [user, setUser] = useState(null);
+  const [isUserOpen, setIsUserOpen] = useState(false);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
     try {
       const storedUser = localStorage.getItem("user");
-      return storedUser ? JSON.parse(storedUser) : null;
+      if (storedUser) {
+        setUser(JSON.parse(storedUser));
+      }
     } catch {
-      return null;
+      // ignore parse errors
     }
-  });
-  const [isUserOpen, setIsUserOpen] = useState(false);
+  }, []);
 
   const handleHeroClick = () => {
     setClicked(true);
@@ -437,7 +441,11 @@ export default function App() {
               card={card}
               onClick={(e) => {
                 if (i === 2) {
-                  router.push("/report/disease");
+                  window.location.href = "/report/disease";
+                  return;
+                }
+                if (i === 3) {
+                  setDoctorModalOpen(true);
                   return;
                 }
                 setOriginRect(e.currentTarget.getBoundingClientRect());
@@ -447,6 +455,13 @@ export default function App() {
           ))}
         </div>
       </div>
+
+      {/* Doctor finder modal on top of home */}
+      <AnimatePresence>
+        {doctorModalOpen && (
+          <DoctorModal onClose={() => setDoctorModalOpen(false)} />
+        )}
+      </AnimatePresence>
 
       {/* Panel Overlay */}
       <AnimatePresence>
