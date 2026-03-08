@@ -407,6 +407,44 @@ const enforcer   = new MonocularEnforcer({ sustainMs: 400 });
 const reporter   = new ConfidenceReporter();
 let   renderer   = null;
 
+// ─── Iris narration ───────────────────────────────────────────────────────────
+(function () {
+  let _speaking = false;
+  let _queue    = [];
+
+  async function _flush() {
+    if (_speaking || _queue.length === 0) return;
+    _speaking = true;
+    const text = _queue.shift();
+    try {
+      const res = await fetch('/api/tts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text }),
+      });
+      if (res.ok) {
+        const buf = await res.arrayBuffer();
+        const url = URL.createObjectURL(new Blob([buf], { type: 'audio/mpeg' }));
+        await new Promise(resolve => {
+          const audio = new Audio(url);
+          audio.onended  = () => { URL.revokeObjectURL(url); resolve(); };
+          audio.onerror  = () => { URL.revokeObjectURL(url); resolve(); };
+          audio.play().catch(resolve);
+        });
+      }
+    } catch { /* silently ignore */ }
+    _speaking = false;
+    _flush();
+  }
+
+  window.irisSpeak = function (text) {
+    if (localStorage.getItem('irisGuidanceEnabled') !== 'true') return;
+    _queue = [text]; // replace queued lines so we always say the most relevant thing
+    _flush();
+  };
+  window.irisClear = function () { _queue = []; };
+})();
+
 // ─── App state ───────────────────────────────────────────────────────────────
 let appState   = 'DISPLAY_CAL';
 let stimState  = 'IDLE';
@@ -522,6 +560,7 @@ D('btn-cal-skip').onclick = () => {
 D('btn-recal').onclick = () => {
   calibrator.clear(); stopCamera();
   showOv('ov-display-cal'); setState('DISPLAY_CAL');
+  irisSpeak("Welcome back! Let's recalibrate your display. You'll see a white rectangle on screen. Use the slider to resize it until it matches the exact width and height of a credit card. This ensures accurate measurements.");
 };
 function updateDebugCal() {
   setDv('d-mmpx', calibrator.mmPerPx?.toFixed(4) ?? '—');
@@ -532,6 +571,7 @@ function updateDebugCal() {
 async function startLoading() {
   if (stream) return; // already started
   showOv('ov-loading'); setState('LOADING');
+  irisSpeak("Great! Now I'm turning on your webcam and loading the vision models. Please make sure you're in a well-lit area with your face clearly visible. This should only take a few seconds.");
   D('loading-msg').textContent = 'Requesting camera…';
   try {
     stream = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480, facingMode: 'user' }, audio: false });
@@ -611,6 +651,12 @@ function goToMonocularSetup() {
   D('cover-status').textContent  = '—';
   showOv('ov-monocular');
   setState('MONOCULAR_SETUP');
+  const eyeLabel = currentEye === 'right' ? 'right' : 'left';
+  const otherEye = currentEye === 'right' ? 'left' : 'right';
+  irisSpeak(
+    `Phase one: monocular setup. Cover your ${eyeLabel} eye with your palm and keep your ${otherEye} eye open and looking at the screen. ` +
+    `Hold your hand flat so the camera can detect it. The progress bar will fill once the cover is confirmed. Keep it covered until I tell you we're ready.`
+  );
   enforcer.reset();
   showLabel(''); showMsg(''); setProgress('');
 }
@@ -625,11 +671,18 @@ function beginAxisSearch() {
   axisStep   = 0;
   hideAllOv(); showOv('ov-axis-intro');
   setState('AXIS_INTRO');
+  irisSpeak(
+    "Phase two: axis search. You'll see two sets of striped lines appear on screen, one at a time. " +
+    "Your job is to decide which set of lines looks sharper or clearer to you. " +
+    "Press the number 1 if the first pattern is clearer, or press 2 if the second is clearer. " +
+    "There will be about six comparisons. Trust your first instinct and answer quickly. When you're ready, click the start button."
+  );
 }
 D('btn-axis-start').onclick = () => {
   hideAllOv(); setState('AXIS');
   stimStateT = performance.now();
   showLabel(''); showMsg(''); setProgress('');
+  irisSpeak("Here we go. Watch for the patterns and press 1 or 2 for each comparison.");
 };
 function startNextAxisPair() {
   axisPair   = axisEngine.nextPair();
@@ -654,6 +707,12 @@ function beginMDSF() {
   });
   showOv('ov-mdsf-intro');
   setState('MDSF_INTRO');
+  irisSpeak(
+    "Great work on the axis test! Now phase three: the resolution staircase. " +
+    "A grating pattern will flash briefly on either the left or the right side of the screen. " +
+    "Press the left arrow key if you saw it on the left, or the right arrow key if you saw it on the right. " +
+    "The pattern will gradually get finer and harder to see — that's normal and expected. Do your best and don't worry if you're unsure. There are ten trials total."
+  );
 }
 D('btn-mdsf-start').onclick = () => {
   hideAllOv();
@@ -690,6 +749,18 @@ function beginFarPoint(num) {
   showOv('ov-farpoint');
   setState(num === 1 ? 'FAR_POINT_1' : 'FAR_POINT_2');
   showLabel(''); showMsg('');
+  if (num === 1) {
+    irisSpeak(
+      "Phase four: far-point measurement. Start by sitting close to your screen, then slowly lean back. " +
+      "A striped pattern is displayed — keep looking at it as you move away. " +
+      "When the lines begin to blur or disappear, stop moving and hold perfectly still for about two seconds. " +
+      "I will automatically capture your distance. There are two measurements — this is the first one."
+    );
+  } else {
+    irisSpeak(
+      "One more measurement. Same thing — hold still when the pattern blurs and I'll capture your distance automatically."
+    );
+  }
 }
 function autoCaptureFarPoint(mm) {
   const cm = (mm / 10).toFixed(1);
@@ -759,6 +830,12 @@ document.addEventListener('keydown', e => {
 // ─── Results ──────────────────────────────────────────────────────────────────
 function showResults() {
   setState('RESULTS');
+  irisSpeak(
+    "Your screening for this eye is complete! Iris has estimated your prescription based on the test. " +
+    "These are estimates only and are not a medical diagnosis. " +
+    "You can now test your other eye, or view your full report. " +
+    "Remember to consult a licensed eye care professional to confirm any findings."
+  );
   const t1 = interleavedSC?.threshold(0) ?? 0;
   const t2 = interleavedSC?.threshold(1) ?? 0;
   const s1 = interleavedSC?.spread(0)    ?? 0;
@@ -916,8 +993,10 @@ D('btn-other-eye').onclick = () => {
     // Both eyes done — full restart
     currentEye = 'right';
     Object.keys(eyeResultsMap).forEach(k => delete eyeResultsMap[k]);
+    irisSpeak("Let's start over from the beginning for a fresh test.");
   } else {
     currentEye = currentEye === 'right' ? 'left' : 'right';
+    irisSpeak(`Great work! Now let's test your ${currentEye} eye. Switch which hand covers your eye so the other eye is now blocked.`);
   }
   resetEyeState();
   goToMonocularSetup();
@@ -1259,8 +1338,18 @@ function updateFPS(now) {
 
 // ─── Boot ─────────────────────────────────────────────────────────────────────
 updateDebugCal();
-if (calibrator.isCalibrated()) startLoading();
-else showOv('ov-display-cal');
+if (calibrator.isCalibrated()) {
+  startLoading();
+} else {
+  showOv('ov-display-cal');
+  // Greet and explain first step
+  irisSpeak(
+    "Welcome to your astigmatism screening. Let's start by calibrating your display. " +
+    "You'll see a white rectangle on screen. Use the slider below it to resize the rectangle " +
+    "until it matches the exact width and height of a standard credit card. " +
+    "This step ensures all measurements are accurate. When it matches, click Continue."
+  );
+}
 </script>
 </body>
 </html>
