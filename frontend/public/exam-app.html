@@ -211,6 +211,23 @@
       box-shadow: 0 0 8px #00FF88;
       transition: left 0.05s, top 0.05s;
     }
+
+    #gaze-direction-label {
+      position: fixed;
+      bottom: 80px; left: 50%;
+      transform: translateX(-50%);
+      font-size: 36px;
+      font-weight: 900;
+      letter-spacing: 3px;
+      color: #FFD700;
+      text-shadow: 0 0 16px #FFD700, 0 2px 6px #000;
+      background: rgba(0,0,0,0.55);
+      padding: 6px 22px;
+      border-radius: 10px;
+      pointer-events: none;
+      z-index: 200;
+      display: none;
+    }
   </style>
 </head>
 <body>
@@ -229,6 +246,7 @@
   <div id="viewport-wrap">
     <video id="video" autoplay playsinline muted></video>
     <canvas id="canvas"></canvas>
+    <div id="gaze-direction-label"></div>
     <div id="loading-overlay">
       <div class="spinner"></div>
       <span id="loading-msg">Loading MediaPipe…</span>
@@ -273,6 +291,9 @@
 
     <hr/><div class="section-label">Gaze</div>
     <table><tbody>
+      <tr><td>Direction</td> <td><span id="d-gaze-dir" class="dbg-val">—</span></td></tr>
+      <tr><td>Iris H</td>    <td><span id="d-iris-h"  class="dbg-val">—</span></td></tr>
+      <tr><td>Iris V</td>    <td><span id="d-iris-v"  class="dbg-val">—</span></td></tr>
       <tr><td>Yaw</td>       <td><span id="d-yaw"   class="dbg-val">—</span></td></tr>
       <tr><td>Pitch</td>     <td><span id="d-pitch"  class="dbg-val">—</span></td></tr>
       <tr><td>Screen X</td>  <td><span id="d-sx"     class="dbg-val">—</span></td></tr>
@@ -412,6 +433,63 @@ const N_LOCK = 30, N_SETTLE = 20, N_COLLECT = 40;
 
 const dirBuf = [];
 
+// ── Iris-in-eye ratio gaze classifier ────────────────────────────────────────
+// Measures where the iris sits inside the eye socket — works without lock eyes.
+// Landmark indices (MediaPipe Face Mesh):
+//   Right eye: outer=33 (ear side), inner=133 (nose side), top=159, bottom=145
+//   Left  eye: inner=362 (nose side), outer=263 (ear side), top=386, bottom=374
+//   Irises: right=468, left=473
+const IRIS_H_THRESH = 0.12;  // offset from 0.5 to count as left/right
+const IRIS_V_THRESH = 0.10;  // offset from 0.5 to count as up/down
+
+// EMA smoothing state for iris ratios
+let _irisRX = 0.5, _irisRY = 0.5;
+const IRIS_EMA = 0.25; // smoothing factor (lower = smoother)
+
+function classifyIrisGaze(lms) {
+  if (!lms[468] || !lms[473]) return null;
+
+  // ── Horizontal ───────────────────────────────────────────────────────────
+  // Right eye: ratio 0 = iris at outer (user looking right), 1 = at inner (left)
+  const rEyeW = lms[133].x - lms[33].x;
+  const rRX   = rEyeW > 0.001 ? (lms[468].x - lms[33].x)  / rEyeW  : 0.5;
+
+  // Left eye: inner corner (362) has smaller x, outer (263) has larger x
+  // ratio 0 = iris at inner (user looking right), 1 = at outer (left)
+  const lEyeW = lms[263].x - lms[362].x;
+  const lRX   = lEyeW > 0.001 ? (lms[473].x - lms[362].x) / lEyeW  : 0.5;
+
+  // ── Vertical ─────────────────────────────────────────────────────────────
+  // ratio 0 = iris at top (looking up), 1 = at bottom (looking down)
+  const rEyeH = lms[145].y - lms[159].y;
+  const rRY   = rEyeH > 0.001 ? (lms[468].y - lms[159].y) / rEyeH  : 0.5;
+
+  const lEyeH = lms[374].y - lms[386].y;
+  const lRY   = lEyeH > 0.001 ? (lms[473].y - lms[386].y) / lEyeH  : 0.5;
+
+  // ── Average & smooth ─────────────────────────────────────────────────────
+  const rawRX = (rRX + lRX) / 2;
+  const rawRY = (rRY + lRY) / 2;
+  _irisRX += (rawRX - _irisRX) * IRIS_EMA;
+  _irisRY += (rawRY - _irisRY) * IRIS_EMA;
+
+  // ── Classify ─────────────────────────────────────────────────────────────
+  const hOff = _irisRX - 0.5; // positive = LEFT, negative = RIGHT
+  const vOff = _irisRY - 0.5; // positive = DOWN, negative = UP
+  const absH = Math.abs(hOff), absV = Math.abs(vOff);
+
+  let dir;
+  if (absH < IRIS_H_THRESH && absV < IRIS_V_THRESH) {
+    dir = 'CENTER';
+  } else if (absH >= absV) {
+    dir = hOff > 0 ? 'LEFT' : 'RIGHT';
+  } else {
+    dir = vOff > 0 ? 'DOWN' : 'UP';
+  }
+
+  return { dir, ratioX: _irisRX, ratioY: _irisRY };
+}
+
 // 3-D debug view
 let debug3dView = null;
 let show3d = false;
@@ -427,13 +505,19 @@ let lastCombinedDir = null;
 // WebSocket  (connects to /gaze-ws on the same host)
 // ─────────────────────────────────────────────────────────────────────────────
 let ws = null;
+let wsRetryTimer = null;   // single pending retry timer
+let wsEnabled = false;     // only retry while camera is running
 
 function connectWS() {
+  // Prevent multiple parallel sockets
+  if (ws && ws.readyState <= WebSocket.OPEN) ws.close();
+  clearTimeout(wsRetryTimer);
+
   const url = `ws://${location.host}/gaze-ws`;
   try {
     ws = new WebSocket(url);
   } catch (e) {
-    return; // quietly skip if WS not supported
+    return;
   }
 
   ws.onopen = () => {
@@ -443,13 +527,24 @@ function connectWS() {
   ws.onclose = () => {
     wsDot.className = '';
     wsLabel.textContent = 'WS: off';
-    // retry after 3 s (server may not be running — silent fail)
-    setTimeout(connectWS, 3000);
+    // Only retry if the camera is still running
+    if (wsEnabled) {
+      wsRetryTimer = setTimeout(connectWS, 3000);
+    }
   };
   ws.onerror = () => {
     wsDot.className = 'error';
     wsLabel.textContent = 'WS: err';
+    // onerror is always followed by onclose — retry handled there
   };
+}
+
+function disconnectWS() {
+  wsEnabled = false;
+  clearTimeout(wsRetryTimer);
+  if (ws) { ws.close(); ws = null; }
+  wsDot.className = '';
+  wsLabel.textContent = 'WS: off';
 }
 
 function sendGaze(data) {
@@ -664,6 +759,22 @@ function renderFrame(timestamp) {
     iris3dR = [faceLms[468].x*vw, faceLms[468].y*vh, faceLms[468].z*vw];
     lastIris3dL = iris3dL; lastIris3dR = iris3dR;
 
+    // ── Iris-relative gaze direction (no lock needed) ──────────────────────
+    const irisGaze = classifyIrisGaze(faceLms);
+    if (irisGaze) {
+      const { dir, ratioX, ratioY } = irisGaze;
+      const dirColors  = { LEFT:'#FF8800', RIGHT:'#44AAFF', UP:'#FF44AA', DOWN:'#FFD700', CENTER:'#00FF88' };
+      const dirArrows  = { LEFT:'← LEFT', RIGHT:'RIGHT →', UP:'↑ UP', DOWN:'↓ DOWN', CENTER:'● CENTER' };
+      const dirLabel   = D('gaze-direction-label');
+      dirLabel.textContent = dirArrows[dir] || dir;
+      dirLabel.style.color = dirColors[dir] || '#fff';
+      dirLabel.style.textShadow = `0 0 12px ${dirColors[dir]}`;
+      dirLabel.style.display = 'block';
+      setD('d-gaze-dir', dir, dir === 'CENTER' ? 'yes' : 'warn');
+      D('d-iris-h').textContent = `${ratioX.toFixed(2)} (${ratioX < 0.5 ? 'R' : 'L'})`;
+      D('d-iris-v').textContent = `${ratioY.toFixed(2)} (${ratioY < 0.5 ? 'U' : 'D'})`;
+    }
+
     // Build 3-D landmarks array for debug view
     landmarks3d = faceLms.map(lm => [lm.x*vw, lm.y*vh, lm.z*vw]);
 
@@ -705,6 +816,7 @@ function renderFrame(timestamp) {
         sendGaze({
           x: screenX, y: screenY,
           rawYaw: rawYawDeg, rawPitch: rawPitchDeg,
+          direction: irisGaze?.dir ?? null,
           calibrated,
           t: Date.now(),
         });
@@ -730,12 +842,6 @@ function renderFrame(timestamp) {
       ctx.beginPath(); ctx.arc(sphereWL[0], sphereWL[1], BASE_R*scaleL, 0, Math.PI*2); ctx.stroke();
       ctx.strokeStyle = '#19FFFF';
       ctx.beginPath(); ctx.arc(sphereWR[0], sphereWR[1], BASE_R*scaleR, 0, Math.PI*2); ctx.stroke();
-    } else {
-      // No spheres — draw raw iris markers
-      ctx.strokeStyle = '#FF1919'; ctx.lineWidth = 2;
-      ctx.beginPath(); ctx.arc(iris3dL[0], iris3dL[1], 10, 0, Math.PI*2); ctx.stroke();
-      ctx.strokeStyle = '#19FF19';
-      ctx.beginPath(); ctx.arc(iris3dR[0], iris3dR[1], 10, 0, Math.PI*2); ctx.stroke();
     }
 
     // ── Calibration feeding ─────────────────────────────────────────────────
@@ -793,9 +899,44 @@ function renderFrame(timestamp) {
     if (i === 0) { handDir = smoothDirection(dirBuf, classifyDirection(lms)); handLms0 = lms; }
   }
 
-  // ── Eye cover ───────────────────────────────────────────────────────────────
-  const cover = detectHandOverEye(handLms0, faceLms, vw, vh);
+  // ── Eye cover (check all hands, track which hand covers which eye) ──────────
+  // cover.left/right = null (none) | 'Left Hand' | 'Right Hand'
+  const cover = { left: null, right: null };
+  for (let i = 0; i < hands.length; i++) {
+    const hLms      = hands[i];
+    const handLabel = hr.handedness?.[i]?.[0]?.categoryName || 'Hand';
+    const handName  = handLabel + ' Hand';
+    const c = detectHandOverEye(hLms, faceLms, vw, vh);
+    if (c.left  && !cover.left)  cover.left  = handName;
+    if (c.right && !cover.right) cover.right = handName;
+  }
   if (handLms0) drawDirectionLabel(ctx, handLms0, ts, handDir);
+
+  // ── Draw eye-cover indicators on canvas ──────────────────────────────────────
+  if (faceLms && (cover.left || cover.right)) {
+    ctx.font = 'bold 13px system-ui';
+    ctx.textAlign = 'center';
+
+    if (cover.right) {
+      const re = { x: (1 - faceLms[468].x) * cw, y: faceLms[468].y * ch };
+      ctx.fillStyle = 'rgba(255,60,60,0.60)';
+      ctx.beginPath(); ctx.arc(re.x, re.y, 38, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#fff';
+      ctx.fillText('COVERED', re.x, re.y - 4);
+      ctx.fillText(cover.right, re.x, re.y + 13);
+    }
+
+    if (cover.left) {
+      const le = { x: (1 - faceLms[473].x) * cw, y: faceLms[473].y * ch };
+      ctx.fillStyle = 'rgba(255,60,60,0.60)';
+      ctx.beginPath(); ctx.arc(le.x, le.y, 38, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#fff';
+      ctx.fillText('COVERED', le.x, le.y - 4);
+      ctx.fillText(cover.left, le.x, le.y + 13);
+    }
+
+    ctx.textAlign = 'left';
+  }
 
   // ── FPS ─────────────────────────────────────────────────────────────────────
   frameCount++;
@@ -807,8 +948,8 @@ function renderFrame(timestamp) {
   setD('d-face',  faceLms ? 'YES' : 'NO', faceLms ? 'yes' : 'no');
   D('d-dir').textContent  = handDir;
   D('d-fps').textContent  = `${fps} fps`;
-  setD('d-cov-r', cover.right ? 'COVERED' : 'clear', cover.right ? 'no' : 'yes');
-  setD('d-cov-l', cover.left  ? 'COVERED' : 'clear', cover.left  ? 'no' : 'yes');
+  setD('d-cov-r', cover.right ? cover.right : 'clear', cover.right ? 'no' : 'yes');
+  setD('d-cov-l', cover.left  ? cover.left  : 'clear', cover.left  ? 'no' : 'yes');
   setD('d-zoom',  zoomEnabled ? 'ON' : 'OFF', zoomEnabled ? 'yes' : 'no');
 
   if (faceLms) {
@@ -831,7 +972,9 @@ function renderFrame(timestamp) {
       D('d-sy').textContent = screenY;
     }
   }
-  if (!leftSphere) setD('d-sphere', 'unlocked — press C', 'warn');
+  if (!leftSphere) {
+    setD('d-sphere', 'unlocked — press C', 'warn');
+  }
 
   // ── 3-D debug view ───────────────────────────────────────────────────────────
   if (show3d && debug3dView) {
@@ -870,11 +1013,13 @@ btnStart.onclick = async () => {
     await video.play();
     running = true; frameCount = 0; lastFpsTime = performance.now(); fps = 0;
     gazeDeque.reset(); dirBuf.length = 0; smoothCrop = null;
+    _irisRX = 0.5; _irisRY = 0.5;
     Rref = null; leftSphere = null; rightSphere = null; monitorPlane = null;
     lastCombinedDir = null; gazeMarkers = [];
     btnStop.disabled = false; btnZoom.disabled = false; btnLock.disabled = false;
     setStatus('Running — press C to lock eye spheres, then calibrate.');
     requestAnimationFrame(renderFrame);
+    wsEnabled = true;
     connectWS();
   } catch (e) {
     btnStart.disabled = false;
@@ -889,12 +1034,14 @@ btnStop.onclick = () => {
   video.srcObject = null;
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   hideCalib(); hideGazeDot();
+  D('gaze-direction-label').style.display = 'none';
   calibState = 'IDLE'; calibrated = false; calibCoeffsX = null; calibCoeffsY = null;
   leftSphere = null; rightSphere = null; monitorPlane = null;
   btnStart.disabled = false; btnStop.disabled = true;
   btnZoom.disabled = true; btnLock.disabled = true; btnCalib.disabled = true;
   btnZoom.textContent = 'Focus Face';
   btnCalib.textContent = 'Calibrate Gaze';
+  disconnectWS();
   setStatus('Camera stopped.');
   setD('d-calib', '—'); setD('d-sphere', '—');
 };

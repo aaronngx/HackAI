@@ -21,7 +21,18 @@ app.prepare().then(() => {
   });
 
   // ── WebSocket server on the same HTTP port, path /gaze-ws ─────────────────
-  const wss = new WebSocketServer({ server, path: '/gaze-ws' });
+  // noServer: true so Next.js HMR upgrades (_next/webpack-hmr) are not blocked
+  const wss = new WebSocketServer({ noServer: true });
+
+  server.on('upgrade', (req, socket, head) => {
+    const { pathname } = parse(req.url);
+    if (pathname === '/gaze-ws') {
+      wss.handleUpgrade(req, socket, head, ws => {
+        wss.emit('connection', ws, req);
+      });
+    }
+    // all other paths (e.g. _next/webpack-hmr) fall through to Next.js
+  });
 
   wss.on('connection', ws => {
     console.log('[WS] client connected —', wss.clients.size, 'total');
@@ -36,7 +47,7 @@ app.prepare().then(() => {
       }
     });
 
-    ws.on('close', () => console.log('[WS] client disconnected'));
+    ws.on('close', () => console.log('[WS] client disconnected —', wss.clients.size, 'remaining'));
     ws.on('error', err => console.error('[WS] error:', err.message));
   });
 

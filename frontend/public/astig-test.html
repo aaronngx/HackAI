@@ -1,0 +1,491 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Astigmatism Test – Phase 1</title>
+  <style>
+    * { margin:0; padding:0; box-sizing:border-box; }
+    body { background:#0a0a0f; color:#e0e0e0; font-family:'Segoe UI',system-ui,sans-serif; height:100vh; display:flex; flex-direction:column; overflow:hidden; }
+
+    header { padding:8px 18px; background:#111118; border-bottom:1px solid #222; display:flex; align-items:center; gap:14px; flex-shrink:0; }
+    header h1 { font-size:15px; color:#00FF88; letter-spacing:1px; }
+    header p  { font-size:11px; color:#555; }
+    #phase-badge { margin-left:auto; font-size:11px; color:#FFD700; background:#1a1a00; border:1px solid #444400; border-radius:4px; padding:2px 8px; }
+
+    /* ── Main layout ── */
+    main { flex:1; display:flex; overflow:hidden; min-height:0; }
+
+    /* ── Stimulus canvas area ── */
+    #stimulus-wrap { flex:1; position:relative; background:#000; display:flex; align-items:center; justify-content:center; }
+    #stim-canvas   { display:block; width:100%; height:100%; }
+
+    /* ── Control panel ── */
+    #ctrl-panel { width:240px; background:#111118; border-left:1px solid #222; padding:12px 10px; overflow-y:auto; flex-shrink:0; }
+    #ctrl-panel h2 { font-size:12px; color:#00FF88; margin-bottom:8px; }
+    .ctrl-group { margin-bottom:12px; }
+    .ctrl-label { font-size:11px; color:#888; margin-bottom:3px; }
+    .ctrl-val   { font-size:11px; color:#fff; font-weight:600; }
+    input[type=range] { width:100%; accent-color:#00FF88; }
+    select, input[type=number] { width:100%; background:#1a1a24; color:#ddd; border:1px solid #333; border-radius:4px; padding:4px 6px; font-size:11px; }
+    button { width:100%; padding:7px; border:none; border-radius:6px; font-size:12px; font-weight:700; cursor:pointer; margin-top:4px; }
+    .btn-green  { background:#00FF88; color:#000; }
+    .btn-red    { background:#FF4444; color:#fff; }
+    .btn-blue   { background:#2255FF; color:#fff; }
+    .btn-gray   { background:#333; color:#aaa; border:1px solid #444; }
+    button:disabled { opacity:0.35; cursor:not-allowed; }
+
+    hr { border:none; border-top:1px solid #222; margin:8px 0; }
+    .section-label { font-size:10px; color:#666; text-transform:uppercase; letter-spacing:1px; margin:6px 0 3px; }
+    table { width:100%; border-collapse:collapse; font-size:11px; }
+    td { padding:2px 0; }
+    td:first-child { color:#666; width:90px; }
+    .val-ok   { color:#00FF88; }
+    .val-warn { color:#FFD700; }
+    .val-err  { color:#FF4444; }
+
+    /* ── Overlay states ── */
+    .overlay { position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; background:rgba(0,0,0,0.92); z-index:50; }
+    .overlay.hidden { display:none; }
+    .overlay h2 { color:#00FF88; font-size:20px; margin-bottom:14px; }
+    .overlay p  { color:#aaa; font-size:13px; line-height:1.7; max-width:440px; text-align:center; }
+
+    /* ── Display calibration ── */
+    #cal-card-wrap { position:relative; margin:20px 0; }
+    #cal-card {
+      background:#fff; border:3px solid #FFD700;
+      border-radius:8px; display:flex; align-items:center; justify-content:center;
+      color:#222; font-size:13px; font-weight:600; cursor:ew-resize;
+      user-select:none;
+    }
+    #cal-card-hint { font-size:11px; color:#888; margin-top:6px; text-align:center; }
+    #cal-slider-wrap { display:flex; flex-direction:column; align-items:center; gap:6px; width:360px; }
+    #cal-slider { width:100%; accent-color:#FFD700; }
+    #cal-val { font-size:12px; color:#FFD700; }
+
+    /* ── Spinner ── */
+    .spinner { width:38px; height:38px; border:3px solid #333; border-top-color:#00FF88; border-radius:50%; animation:spin 0.8s linear infinite; margin-bottom:12px; }
+    @keyframes spin { to { transform:rotate(360deg); } }
+
+    /* ── Distance badge on canvas ── */
+    #dist-badge {
+      position:absolute; bottom:14px; left:50%; transform:translateX(-50%);
+      background:rgba(0,0,0,0.65); border:1px solid #333; border-radius:6px;
+      padding:4px 14px; font-size:13px; color:#aaa; pointer-events:none;
+      display:none;
+    }
+    #dist-badge.ok   { color:#00FF88; border-color:#00FF88; }
+    #dist-badge.warn { color:#FFD700; border-color:#FFD700; }
+    #dist-badge.err  { color:#FF4444; border-color:#FF4444; }
+
+    /* hidden video for MediaPipe */
+    #video { position:absolute; opacity:0; width:1px; height:1px; }
+  </style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1>Astigmatism Screening</h1>
+    <p>Phase 1 — Stimulus Renderer + Distance Scaling</p>
+  </div>
+  <span id="phase-badge">CALIBRATION</span>
+</header>
+
+<main>
+  <!-- ── Stimulus canvas area ── -->
+  <div id="stimulus-wrap">
+    <canvas id="stim-canvas"></canvas>
+    <video id="video" autoplay playsinline muted></video>
+    <div id="dist-badge">— cm</div>
+
+    <!-- State: Display calibration -->
+    <div class="overlay" id="ov-display-cal">
+      <h2>Screen Calibration</h2>
+      <p>Hold a credit card (or ID card) against your screen.<br>
+         Drag the slider until the yellow box <strong>exactly matches</strong> your card.</p>
+      <div id="cal-slider-wrap">
+        <input type="range" id="cal-slider" min="100" max="600" value="300"/>
+        <span id="cal-val">300 px wide</span>
+        <div id="cal-card-wrap">
+          <div id="cal-card">Credit / ID Card</div>
+        </div>
+        <div id="cal-card-hint">Drag slider to resize • Card = 85.6 × 54 mm</div>
+      </div>
+      <button class="btn-green" id="btn-cal-confirm" style="width:200px;margin-top:16px">This matches my card ✓</button>
+      <button class="btn-gray"  id="btn-cal-skip"    style="width:200px;margin-top:6px">Skip (use saved / estimate)</button>
+    </div>
+
+    <!-- State: Loading MediaPipe -->
+    <div class="overlay hidden" id="ov-loading">
+      <div class="spinner"></div>
+      <span id="load-msg" style="color:#aaa;font-size:13px">Loading MediaPipe…</span>
+    </div>
+
+    <!-- State: Ready (camera running, shows stimulus) -->
+    <!-- No overlay — stimulus renders directly on canvas -->
+  </div>
+
+  <!-- ── Control panel ── -->
+  <aside id="ctrl-panel">
+    <h2>Controls</h2>
+
+    <div class="ctrl-group">
+      <div class="ctrl-label">Angle <span class="ctrl-val" id="lbl-angle">0°</span></div>
+      <input type="range" id="sl-angle" min="0" max="175" step="5" value="0"/>
+    </div>
+
+    <div class="ctrl-group">
+      <div class="ctrl-label">Target CPD <span class="ctrl-val" id="lbl-cpd">3.0</span></div>
+      <input type="range" id="sl-cpd" min="0.5" max="20" step="0.5" value="3"/>
+    </div>
+
+    <div class="ctrl-group">
+      <div class="ctrl-label">Color mode</div>
+      <select id="sel-color">
+        <option value="#FF0000">Red</option>
+        <option value="#0000FF">Blue</option>
+        <option value="#ffffff">White</option>
+      </select>
+    </div>
+
+    <div class="ctrl-group">
+      <div class="ctrl-label">Stimulus type</div>
+      <select id="sel-type">
+        <option value="grating">Grating (50% duty)</option>
+        <option value="tripole">Tripole (33% duty)</option>
+      </select>
+    </div>
+
+    <div class="ctrl-group">
+      <label style="font-size:11px;color:#888;display:flex;align-items:center;gap:6px;cursor:pointer">
+        <input type="checkbox" id="chk-fixdot" checked/>
+        Fixation dot
+      </label>
+      <label style="font-size:11px;color:#888;display:flex;align-items:center;gap:6px;cursor:pointer;margin-top:4px">
+        <input type="checkbox" id="chk-debug" checked/>
+        Debug overlay
+      </label>
+      <label style="font-size:11px;color:#888;display:flex;align-items:center;gap:6px;cursor:pointer;margin-top:4px">
+        <input type="checkbox" id="chk-live-scale" checked/>
+        Live distance scaling
+      </label>
+    </div>
+
+    <button class="btn-blue"  id="btn-fullscreen">⛶ Fullscreen</button>
+    <button class="btn-gray"  id="btn-recal">Recalibrate Screen</button>
+
+    <hr/>
+    <div class="section-label">Live Tracking</div>
+    <table><tbody>
+      <tr><td>Face</td>     <td><span id="d-face">—</span></td></tr>
+      <tr><td>Distance</td> <td><span id="d-dist">—</span></td></tr>
+      <tr><td>Dist (corr)</td><td><span id="d-dist-c">—</span></td></tr>
+    </tbody></table>
+
+    <hr/>
+    <div class="section-label">Display Cal</div>
+    <table><tbody>
+      <tr><td>mm/px</td>    <td><span id="d-mmpx">—</span></td></tr>
+      <tr><td>PPI</td>      <td><span id="d-ppi">—</span></td></tr>
+      <tr><td>Screen H</td> <td><span id="d-scrh">—</span></td></tr>
+    </tbody></table>
+
+    <hr/>
+    <div class="section-label">Stimulus</div>
+    <table><tbody>
+      <tr><td>Period</td>   <td><span id="d-period">—</span></td></tr>
+      <tr><td>Max CPD</td>  <td><span id="d-maxcpd">—</span></td></tr>
+      <tr><td>Angle</td>    <td><span id="d-angle">—</span></td></tr>
+      <tr><td>FPS</td>      <td><span id="d-fps">—</span></td></tr>
+    </tbody></table>
+
+    <hr/>
+    <div class="section-label">Camera Offset</div>
+    <div class="ctrl-label" style="margin-top:4px">Camera above screen top (mm)</div>
+    <input type="number" id="inp-cam-offset" value="25" min="0" max="80" step="5"/>
+  </aside>
+</main>
+
+<script type="module">
+import { DisplayCalibrator, CARD_W_MM, CARD_H_MM } from '/display-calibrator.js';
+import { DistanceSmoother }  from '/distance-smoother.js';
+import { StimulusRenderer }  from '/stimulus-renderer.js';
+import { computePD }         from '/face-eye-tracker.js';
+
+// ── Constants ────────────────────────────────────────────────────────────────
+const WASM_PATH  = '/mediapipe-wasm';
+const FACE_MODEL = 'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task';
+
+// ── DOM ──────────────────────────────────────────────────────────────────────
+const stimCanvas   = document.getElementById('stim-canvas');
+const video        = document.getElementById('video');
+const distBadge    = document.getElementById('dist-badge');
+const phaseBadge   = document.getElementById('phase-badge');
+const ovDisplayCal = document.getElementById('ov-display-cal');
+const ovLoading    = document.getElementById('ov-loading');
+const loadMsg      = document.getElementById('load-msg');
+
+const slAngle      = document.getElementById('sl-angle');
+const slCPD        = document.getElementById('sl-cpd');
+const selColor     = document.getElementById('sel-color');
+const selType      = document.getElementById('sel-type');
+const chkFixdot    = document.getElementById('chk-fixdot');
+const chkDebug     = document.getElementById('chk-debug');
+const chkLiveScale = document.getElementById('chk-live-scale');
+const btnFullscreen= document.getElementById('btn-fullscreen');
+const btnRecal     = document.getElementById('btn-recal');
+const inpCamOffset = document.getElementById('inp-cam-offset');
+
+const calSlider    = document.getElementById('cal-slider');
+const calVal       = document.getElementById('cal-val');
+const calCard      = document.getElementById('cal-card');
+const btnCalConfirm= document.getElementById('btn-cal-confirm');
+const btnCalSkip   = document.getElementById('btn-cal-skip');
+
+const D = id => document.getElementById(id);
+
+// ── Module instances ─────────────────────────────────────────────────────────
+const calibrator = new DisplayCalibrator();
+const smoother   = new DistanceSmoother({ cameraOffsetMm: 25 });
+let   renderer   = null;
+
+// ── State ────────────────────────────────────────────────────────────────────
+let faceLandmarker = null;
+let stream         = null;
+let animId         = null;
+let running        = false;
+let frameCount = 0, lastFpsT = performance.now(), fps = 0;
+
+// ── Resize canvas to fill its container ──────────────────────────────────────
+function resizeCanvas() {
+  const wrap = stimCanvas.parentElement;
+  stimCanvas.width  = wrap.clientWidth;
+  stimCanvas.height = wrap.clientHeight;
+}
+window.addEventListener('resize', resizeCanvas);
+resizeCanvas();
+
+// ── Display calibration UI ───────────────────────────────────────────────────
+function updateCalCard(widthPx) {
+  const aspect  = CARD_H_MM / CARD_W_MM;
+  const heightPx = widthPx * aspect;
+  calCard.style.width  = widthPx + 'px';
+  calCard.style.height = heightPx + 'px';
+  calVal.textContent   = `${widthPx} px wide`;
+}
+
+calSlider.addEventListener('input', () => updateCalCard(+calSlider.value));
+updateCalCard(+calSlider.value);
+
+// Pre-fill slider if already calibrated
+if (calibrator.isCalibrated()) {
+  const px = Math.round(CARD_W_MM / calibrator.mmPerPx);
+  calSlider.value = Math.min(600, Math.max(100, px));
+  updateCalCard(+calSlider.value);
+}
+
+btnCalConfirm.onclick = () => {
+  const widthPx  = +calSlider.value;
+  const heightPx = widthPx * (CARD_H_MM / CARD_W_MM);
+  const mmPerPx  = DisplayCalibrator.fromCardPx(widthPx, heightPx);
+
+  if (mmPerPx < 0.04 || mmPerPx > 1.2) {
+    alert('Unusual result — please try again.');
+    return;
+  }
+  calibrator.save(mmPerPx);
+  updateCalDisplay();
+  startLoading();
+};
+
+btnCalSkip.onclick = () => {
+  if (!calibrator.isCalibrated()) {
+    // Estimate from window.screen and devicePixelRatio
+    const diagPx   = Math.sqrt(screen.width**2 + screen.height**2) * devicePixelRatio;
+    // Ask user for diagonal
+    const diagIn   = parseFloat(prompt('Enter your screen diagonal in inches (e.g. 15.6):', '15.6'));
+    if (!diagIn || isNaN(diagIn)) return;
+    const ppi      = diagPx / diagIn;
+    const mmPerPx  = 25.4 / ppi;
+    calibrator.save(mmPerPx);
+  }
+  updateCalDisplay();
+  startLoading();
+};
+
+btnRecal.onclick = () => {
+  calibrator.clear();
+  stopCamera();
+  ovDisplayCal.classList.remove('hidden');
+  phaseBadge.textContent = 'CALIBRATION';
+};
+
+function updateCalDisplay() {
+  D('d-mmpx').textContent = calibrator.mmPerPx?.toFixed(4) ?? '—';
+  D('d-ppi').textContent  = calibrator.ppi?.toFixed(1) ?? '—';
+  D('d-scrh').textContent = calibrator.getScreenHeightMm()?.toFixed(0) + ' mm' ?? '—';
+}
+
+// ── MediaPipe loading ─────────────────────────────────────────────────────────
+async function startLoading() {
+  ovDisplayCal.classList.add('hidden');
+  ovLoading.classList.remove('hidden');
+  phaseBadge.textContent = 'LOADING';
+
+  try {
+    loadMsg.textContent = 'Loading MediaPipe JS…';
+    const { FaceLandmarker, FilesetResolver } =
+      await new Function('return import("/mediapipe-vision.js")')();
+
+    loadMsg.textContent = 'Initializing WASM…';
+    const vision = await FilesetResolver.forVisionTasks(WASM_PATH);
+
+    loadMsg.textContent = 'Loading Face model…';
+    faceLandmarker = await FaceLandmarker.createFromOptions(vision, {
+      baseOptions: { modelAssetPath: FACE_MODEL, delegate: 'GPU' },
+      runningMode: 'VIDEO', numFaces: 1,
+      outputFaceBlendshapes: false, outputFacialTransformationMatrixes: false,
+    });
+
+    loadMsg.textContent = 'Starting camera…';
+    stream = await navigator.mediaDevices.getUserMedia({
+      video: { width:{ideal:1280}, height:{ideal:720}, frameRate:{ideal:30}, facingMode:'user' },
+      audio: false,
+    });
+    video.srcObject = stream;
+    await new Promise((res, rej) => { video.onloadedmetadata = res; video.onerror = rej; });
+    await video.play();
+
+    // Init renderer now that canvas is sized
+    renderer = new StimulusRenderer(stimCanvas);
+
+    ovLoading.classList.add('hidden');
+    phaseBadge.textContent = 'RUNNING';
+    distBadge.style.display = 'block';
+    running = true;
+    requestAnimationFrame(renderLoop);
+
+  } catch (e) {
+    loadMsg.textContent = `Error: ${e.message}`;
+    loadMsg.style.color = '#FF4444';
+    console.error('[AstigTest]', e);
+  }
+}
+
+// ── Render loop ───────────────────────────────────────────────────────────────
+function renderLoop(timestamp) {
+  if (!running) return;
+  animId = requestAnimationFrame(renderLoop);
+  if (video.videoWidth === 0 || video.readyState < 2) return;
+
+  const vw = video.videoWidth, vh = video.videoHeight;
+
+  // Face detection
+  const fr     = faceLandmarker.detectForVideo(video, timestamp);
+  const faceLms = (fr.faceLandmarks || [])[0] || null;
+
+  // Distance
+  let rawDist = null;
+  if (faceLms) {
+    const pd = computePD(faceLms, vw, vh);
+    rawDist = pd?.distCm ?? null;
+  }
+
+  smoother._cameraOffsetMm = +inpCamOffset.value || 25;
+  const smoothedCm  = smoother.push(rawDist);
+  const correctedMm = smoother.getCorrectedMm(calibrator.getScreenHeightMm() ?? 0);
+  const distMm      = chkLiveScale.checked
+    ? (correctedMm ?? (smoothedCm ? smoothedCm * 10 : 400))
+    : 400; // fallback: 40cm fixed if scaling off
+
+  // Stimulus params from controls
+  const angleDeg  = +slAngle.value;
+  const cpd       = +slCPD.value;
+  const color     = selColor.value;
+  const type      = selType.value;
+  const fixDot    = chkFixdot.checked;
+  const showDebug = chkDebug.checked;
+  const mmPerPx   = calibrator.mmPerPx ?? 0.18;
+
+  // Ensure canvas fills container
+  const wrap = stimCanvas.parentElement;
+  if (stimCanvas.width !== wrap.clientWidth || stimCanvas.height !== wrap.clientHeight) {
+    stimCanvas.width  = wrap.clientWidth;
+    stimCanvas.height = wrap.clientHeight;
+  }
+
+  // Draw stimulus
+  renderer.drawGrating({ angleDeg, cpd, distMm, mmPerPx, color, fixationDot: fixDot, type });
+
+  // Debug overlay
+  if (showDebug) {
+    const period = StimulusRenderer.periodPx(cpd, distMm, mmPerPx);
+    renderer.drawDebugOverlay({
+      cpd, distMm, mmPerPx, period,
+      label: `angle: ${angleDeg}°  type: ${type}  ${color === '#FF0000' ? 'RED' : color === '#0000FF' ? 'BLUE' : 'WHITE'}`,
+    });
+  }
+
+  // Distance badge
+  if (smoother.isValid()) {
+    const cm = smoothedCm.toFixed(0);
+    distBadge.textContent = `${cm} cm`;
+    distBadge.className = +cm < 25 || +cm > 150 ? 'warn' : 'ok';
+  } else {
+    distBadge.textContent = faceLms ? 'measuring…' : 'No face';
+    distBadge.className = 'err';
+  }
+
+  // FPS
+  frameCount++;
+  const now = performance.now();
+  if (now - lastFpsT >= 1000) { fps = frameCount; frameCount = 0; lastFpsT = now; }
+
+  // Debug panel
+  D('d-face').textContent   = faceLms ? '✓' : '—';
+  D('d-face').className     = faceLms ? 'val-ok' : 'val-err';
+  D('d-dist').textContent   = smoothedCm ? `${smoothedCm.toFixed(1)} cm` : '—';
+  D('d-dist-c').textContent = correctedMm ? `${(correctedMm/10).toFixed(1)} cm` : '—';
+  D('d-period').textContent = `${StimulusRenderer.periodPx(cpd, distMm, mmPerPx).toFixed(1)} px`;
+  D('d-maxcpd').textContent = `${StimulusRenderer.maxCPD(distMm, mmPerPx).toFixed(1)} cpd`;
+  D('d-angle').textContent  = `${angleDeg}°`;
+  D('d-fps').textContent    = `${fps}`;
+  D('lbl-angle').textContent = `${angleDeg}°`;
+  D('lbl-cpd').textContent   = `${cpd.toFixed(1)}`;
+}
+
+function stopCamera() {
+  running = false;
+  if (animId) cancelAnimationFrame(animId);
+  if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; }
+  video.srcObject = null;
+  smoother.reset();
+}
+
+// ── Fullscreen ────────────────────────────────────────────────────────────────
+btnFullscreen.onclick = () => {
+  const el = document.getElementById('stimulus-wrap');
+  if (!document.fullscreenElement) {
+    el.requestFullscreen?.();
+  } else {
+    document.exitFullscreen?.();
+  }
+};
+document.addEventListener('fullscreenchange', () => {
+  resizeCanvas();
+  btnFullscreen.textContent = document.fullscreenElement ? '✕ Exit Fullscreen' : '⛶ Fullscreen';
+});
+
+// ── Boot ─────────────────────────────────────────────────────────────────────
+updateCalDisplay();
+
+// If already calibrated, skip straight to loading
+if (calibrator.isCalibrated()) {
+  startLoading();
+} else {
+  ovDisplayCal.classList.remove('hidden');
+}
+</script>
+</body>
+</html>
