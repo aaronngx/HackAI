@@ -215,6 +215,23 @@
       <p class="note" id="mdsf-intro-note">Meridian: —</p>
     </div>
 
+    <!-- ── OVERLAY: Far-point walk-back ── -->
+    <div class="ov hidden" id="ov-farpoint">
+      <h2 id="fp-title">Step 4 — Far-Point (Meridian 1)</h2>
+      <p>Sit <strong>close to the screen (~30 cm)</strong> until the lines on screen are clear.<br>
+         Then <strong>slowly lean / move back</strong> until the lines disappear or blur badly.<br>
+         Press the button the moment you lose them.</p>
+      <div id="fp-dist" style="font-size:32px;font-weight:900;color:#00FF88;letter-spacing:2px;margin:4px 0;">— cm</div>
+      <div id="fp-cpd"  style="font-size:12px;color:#555;margin-bottom:8px;">— CPD at this distance</div>
+      <div id="fp-status" style="font-size:14px;color:#aaa;">Move back slowly…</div>
+      <div class="btn-row" style="margin-top:14px">
+        <button class="btn btn-green" id="btn-fp-capture">Lines gone — capture</button>
+        <button class="btn btn-gray"  id="btn-fp-skip">Cannot tell (skip)</button>
+      </div>
+      <p class="note" style="margin-top:10px">Keep your <span id="fp-eye">right</span> eye covered throughout.<br>
+         Press <kbd>Space</kbd> or the button above.</p>
+    </div>
+
     <!-- ── OVERLAY: Results ── -->
     <div class="ov hidden" id="ov-results">
       <h2>Screening Results</h2>
@@ -240,9 +257,19 @@
             <tr><td>Snellen</td><td id="r-sn2">—</td></tr>
           </tbody></table>
         </div>
+        <div class="result-section">
+          <h3>REFRACTION ESTIMATE</h3>
+          <table><tbody>
+            <tr><td>SPH</td>  <td id="r-sph">—</td></tr>
+            <tr><td>CYL</td>  <td id="r-cyl">—</td></tr>
+            <tr><td>AXIS</td> <td id="r-raxis">—</td></tr>
+            <tr><td>FP1</td>  <td id="r-fp1">—</td></tr>
+            <tr><td>FP2</td>  <td id="r-fp2">—</td></tr>
+          </tbody></table>
+        </div>
       </div>
-      <p class="note" style="margin-top:10px">⚠ Screening estimate only. Not a clinical prescription.<br>
-         A large difference in CPD between meridians may indicate astigmatism.</p>
+      <p class="note" id="r-refraction-note" style="margin-top:10px;color:#FFD700;"></p>
+      <p class="note" style="margin-top:4px">⚠ Screening estimate only — not a clinical prescription.</p>
       <div class="btn-row" style="margin-top:10px">
         <button class="btn btn-green" id="btn-restart">Test Again</button>
         <button class="btn btn-blue"  id="btn-export">Export JSON</button>
@@ -310,6 +337,7 @@ import { AxisSearchEngine }   from '/axis-search-engine.js';
 import { StaircaseEngine }    from '/staircase-engine.js';
 import { computePD, computeEAR, R_EAR_IDX, L_EAR_IDX } from '/face-eye-tracker.js';
 import { detectHandOverEye }  from '/hand-tracker.js';
+import { FarPointCapture }    from '/far-point-capture.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Constants
@@ -366,6 +394,13 @@ let mdsf1Result= null, mdsf2Result = null;
 let mdsf1Axis  = 0,   mdsf2Axis   = 90;
 let mdsfSide   = 'left'; // current trial grating side
 
+// Far-point capture
+let fpCapture1 = null, fpCapture2 = null;
+let fp1ResultMm = null, fp2ResultMm = null;
+let fpMeridianNum = 1;
+const FP_GRATING_PX = 3; // fixed pixel period for far-point grating
+let lastDistMm = 400;    // updated each frame, used by captureFarPoint()
+
 // Phase 1 preview mode
 let p1Mode = false;
 
@@ -376,7 +411,7 @@ let lastFaceLms = null, lastHands = [], lastHandedness = [];
 let frameCount = 0, lastFpsT = performance.now(), fps = 0;
 
 // Session data
-const session = { ts: Date.now(), axis: null, mdsf1: null, mdsf2: null };
+const session = { ts: Date.now(), axis: null, mdsf1: null, mdsf2: null, fp1Mm: null, fp2Mm: null, refraction: null };
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Canvas resize
@@ -392,7 +427,7 @@ resizeCanvas();
 // ─────────────────────────────────────────────────────────────────────────────
 // Overlay helpers
 // ─────────────────────────────────────────────────────────────────────────────
-const ovIds = ['ov-display-cal','ov-loading','ov-monocular','ov-axis-intro','ov-mdsf-intro','ov-results'];
+const ovIds = ['ov-display-cal','ov-loading','ov-monocular','ov-axis-intro','ov-mdsf-intro','ov-farpoint','ov-results'];
 function showOv(id) { ovIds.forEach(o => D(o).classList.toggle('hidden', o !== id)); }
 function hideAllOv() { ovIds.forEach(o => D(o).classList.add('hidden')); }
 
@@ -624,6 +659,57 @@ function startMDSFTrial() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Far-point walk-back
+// ─────────────────────────────────────────────────────────────────────────────
+function beginFarPoint(meridianNum) {
+  fpMeridianNum = meridianNum;
+  const axisAngle = meridianNum === 1 ? (foundAxis ?? 0) : ((foundAxis ?? 0) + 90) % 180;
+  if (meridianNum === 1) { fpCapture1 = new FarPointCapture(); }
+  if (meridianNum === 2) { fpCapture2 = new FarPointCapture(); }
+
+  D('fp-title').textContent = `Step ${meridianNum === 1 ? '4' : '5'} — Far-Point (Meridian ${meridianNum}: ${axisAngle}°)`;
+  D('fp-eye').textContent   = TEST_EYE;
+  D('fp-status').textContent = 'Move back slowly until lines blur…';
+  D('fp-dist').textContent  = '— cm';
+  D('fp-cpd').textContent   = '— CPD';
+  showOv('ov-farpoint');
+  setState(meridianNum === 1 ? 'FAR_POINT_1' : 'FAR_POINT_2');
+  showLabel(''); showMsg('');
+}
+
+function captureFarPoint() {
+  const distMm = lastDistMm;
+  if (!smoother.isValid() || distMm <= 0) { showMsg('No distance reading — position your face in view.', 1500); return; }
+
+  if (fpMeridianNum === 1) {
+    fp1ResultMm = fpCapture1.capture(distMm);
+    D('fp-status').textContent = `✓ Far point 1 captured: ${(fp1ResultMm/10).toFixed(1)} cm`;
+    showLabel(`FP1: ${(fp1ResultMm/10).toFixed(1)} cm`, '#00FF88');
+    setTimeout(() => { showLabel(''); beginFarPoint(2); }, 1800);
+    setState('FAR_POINT_1_DONE');
+  } else {
+    fp2ResultMm = fpCapture2.capture(distMm);
+    D('fp-status').textContent = `✓ Far point 2 captured: ${(fp2ResultMm/10).toFixed(1)} cm`;
+    showLabel(`FP2: ${(fp2ResultMm/10).toFixed(1)} cm`, '#00FF88');
+    setTimeout(() => { showLabel(''); showResults(); }, 1800);
+    setState('FAR_POINT_2_DONE');
+  }
+}
+
+D('btn-fp-capture').onclick = () => captureFarPoint();
+D('btn-fp-skip').onclick    = () => {
+  if (fpMeridianNum === 1) {
+    fp1ResultMm = null;
+    setTimeout(() => beginFarPoint(2), 200);
+    setState('FAR_POINT_1_DONE');
+  } else {
+    fp2ResultMm = null;
+    setTimeout(() => showResults(), 200);
+    setState('FAR_POINT_2_DONE');
+  }
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Key input
 // ─────────────────────────────────────────────────────────────────────────────
 document.addEventListener('keydown', e => {
@@ -643,6 +729,13 @@ document.addEventListener('keydown', e => {
         axisStep = 0; // trigger next pair
       }
     }
+  }
+
+  // Far-point capture: SPACE
+  if ((appState === 'FAR_POINT_1' || appState === 'FAR_POINT_2') && e.code === 'Space') {
+    e.preventDefault();
+    captureFarPoint();
+    return;
   }
 
   // MDSF response
@@ -671,25 +764,47 @@ function showResults() {
   const t1 = staircase1?.threshold() ?? 0;
   const t2 = staircase2?.threshold() ?? 0;
   session.mdsf1 = t1; session.mdsf2 = t2;
+  session.fp1Mm = fp1ResultMm;
+  session.fp2Mm = fp2ResultMm;
 
   D('r-axis').textContent      = `${foundAxis ?? '?'}°`;
-  D('r-axis-conf').textContent = axisEngine?.getProgress().done + ' comparisons';
+  D('r-axis-conf').textContent = (axisEngine?.getProgress().done ?? '?') + ' comparisons';
   D('r-mdsf1').textContent     = t1.toFixed(2) + ' CPD';
   D('r-sn1').textContent       = `20/${StaircaseEngine.toSnellen(t1)}`;
   D('r-mdsf2').textContent     = t2.toFixed(2) + ' CPD';
   D('r-sn2').textContent       = `20/${StaircaseEngine.toSnellen(t2)}`;
 
+  // Refraction estimate from far-point distances
+  if (fp1ResultMm || fp2ResultMm) {
+    const ref = FarPointCapture.computeRefraction(fp1ResultMm, fp2ResultMm, foundAxis ?? 0);
+    session.refraction = ref;
+    D('r-sph').textContent   = `−${ref.sph.toFixed(2)} D`;
+    D('r-cyl').textContent   = `−${ref.cyl.toFixed(2)} D`;
+    D('r-raxis').textContent = `${ref.axis}°`;
+    D('r-fp1').textContent   = fp1ResultMm ? `${(fp1ResultMm/10).toFixed(1)} cm` : 'skipped';
+    D('r-fp2').textContent   = fp2ResultMm ? `${(fp2ResultMm/10).toFixed(1)} cm` : 'skipped';
+    D('r-refraction-note').textContent = ref.note;
+  } else {
+    D('r-sph').textContent   = 'skipped';
+    D('r-cyl').textContent   = 'skipped';
+    D('r-raxis').textContent = '—';
+    D('r-fp1').textContent   = 'skipped';
+    D('r-fp2').textContent   = 'skipped';
+    D('r-refraction-note').textContent = '';
+  }
+
   const diff = Math.abs(t1 - t2);
-  const note = diff > 1.5
+  const mNote = diff > 1.5
     ? `⚠ ${diff.toFixed(1)} CPD difference between meridians — possible astigmatism.`
-    : `CPD difference: ${diff.toFixed(1)} (within normal range).`;
-  showMsg(note);
+    : `MDSF difference: ${diff.toFixed(1)} CPD (within normal range).`;
+  showMsg(mNote);
   showOv('ov-results');
 }
 
 D('btn-restart').onclick = () => {
   axisEngine = null; staircase1 = null; staircase2 = null;
   foundAxis = null; mdsf1Result = null; mdsf2Result = null;
+  fpCapture1 = null; fpCapture2 = null; fp1ResultMm = null; fp2ResultMm = null;
   axisStep = 0; stimState = 'IDLE';
   showLabel(''); showMsg(''); setProgress('');
   smoother.reset(); enforcer.reset();
@@ -746,6 +861,7 @@ function renderLoop(timestamp) {
   const correctedMm  = smoother.getCorrectedMm(calibrator.getScreenHeightMm() ?? 0);
   const distMm       = correctedMm ?? (smoothedCm ? smoothedCm * 10 : 400);
   const mmPerPx      = calibrator.mmPerPx ?? 0.18;
+  lastDistMm = distMm; // keep for captureFarPoint()
 
   // ── Monocular enforcer (lenient version for astig test) ──────────────────
   // Uses a larger radius, allows any hand gesture, and treats low EAR as cover.
@@ -924,7 +1040,7 @@ function renderLoop(timestamp) {
           } else {
             mdsf2Result = thr;
             showLabel(`Meridian 2: ${thr.toFixed(1)} CPD`, '#00FF88');
-            setTimeout(showResults, 2000);
+            setTimeout(() => { showLabel(''); beginFarPoint(1); }, 2200);
             setState('MDSF_2_DONE');
           }
         } else {
@@ -935,6 +1051,35 @@ function renderLoop(timestamp) {
 
     updateDistBadge(smoothedCm);
     updateDebugPanel(faceLms, smoothedCm, correctedMm, rawDist, axisEngine, sc, null);
+    updateFPS(now);
+    return;
+  }
+
+  // ── Far-point walk-back ───────────────────────────────────────────────────
+  if (appState === 'FAR_POINT_1' || appState === 'FAR_POINT_2') {
+    const meridianNum = appState === 'FAR_POINT_1' ? 1 : 2;
+    const axisAngle   = meridianNum === 1 ? (foundAxis ?? 0) : ((foundAxis ?? 0) + 90) % 180;
+
+    // Fixed-pixel grating — CPD increases naturally as user moves back
+    const fpCPD = StimulusRenderer.cpdFromPeriod(FP_GRATING_PX, distMm, mmPerPx);
+    renderer.drawGrating({
+      angleDeg:    axisAngle,
+      cpd:         fpCPD,
+      distMm,
+      mmPerPx,
+      color:       '#ffffff',
+      fixationDot: true,
+      type:        'grating',
+    });
+
+    // Update overlay live readouts
+    if (smoother.isValid()) {
+      D('fp-dist').textContent = `${(distMm / 10).toFixed(0)} cm`;
+      D('fp-cpd').textContent  = `${fpCPD.toFixed(1)} CPD at this distance`;
+    }
+
+    updateDistBadge(smoothedCm);
+    updateDebugPanel(faceLms, smoothedCm, correctedMm, rawDist, null, null, null);
     updateFPS(now);
     return;
   }
