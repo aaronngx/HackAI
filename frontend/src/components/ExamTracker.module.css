@@ -1,0 +1,311 @@
+/* ExamTracker.module.css — scoped styles for the exam tracker page */
+
+.wrapper {
+  --bg:        #0d0f14;
+  --surface:   #161b22;
+  --border:    #30363d;
+  --accent:    #00FF88;
+  --text:      #e6edf3;
+  --muted:     #8b949e;
+  --radius:    8px;
+  --mono:      "Courier New", Courier, monospace;
+
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  background: var(--bg);
+  color: var(--text);
+  font-family: system-ui, -apple-system, sans-serif;
+  font-size: 14px;
+}
+
+/* ── Header ─────────────────────────────────────────────────────────────── */
+.header {
+  padding: 16px 24px 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+.title {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--accent);
+  letter-spacing: 0.5px;
+  margin: 0;
+}
+.subtitle {
+  color: var(--muted);
+  font-size: 12px;
+  margin-top: 2px;
+}
+
+/* ── Main layout ─────────────────────────────────────────────────────────── */
+.main {
+  flex: 1;
+  display: flex;
+  gap: 16px;
+  padding: 16px;
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+
+/* ── Viewport ────────────────────────────────────────────────────────────── */
+.viewportWrap {
+  position: relative;
+  flex: 1 1 480px;
+  min-width: 280px;
+  max-width: 100%;
+  background: #000;
+  border-radius: var(--radius);
+  overflow: hidden;
+  border: 1px solid var(--border);
+  aspect-ratio: 16 / 9;
+}
+.video {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  pointer-events: none;
+  z-index: 0;
+}
+.overlay {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 2;
+}
+.zoomBadge {
+  display: none;
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  z-index: 5;
+  background: rgba(170, 68, 255, 0.85);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  font-family: var(--mono);
+  letter-spacing: 1.5px;
+  padding: 3px 8px;
+  border-radius: 4px;
+}
+.zoomBadgeVisible { display: block; }
+
+/* ── Loading overlay ─────────────────────────────────────────────────────── */
+.loading {
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  background: rgba(13, 15, 20, 0.85);
+  color: var(--muted);
+  font-size: 13px;
+}
+.spinner {
+  width: 36px;
+  height: 36px;
+  border: 3px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── Debug panel ─────────────────────────────────────────────────────────── */
+.debugPanel {
+  flex: 0 0 220px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px;
+  font-family: var(--mono);
+  font-size: 12px;
+  max-height: 92vh;
+  overflow-y: auto;
+}
+.debugPanel::-webkit-scrollbar { width: 4px; }
+.debugPanel::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+.debugTitle {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin: 0 0 10px;
+}
+.sectionLabel {
+  font-size: 10px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  margin-bottom: 3px;
+}
+.debugTable { width: 100%; border-collapse: collapse; }
+.debugTable td { padding: 3px 0; vertical-align: middle; }
+.label { color: var(--muted); padding-right: 8px; white-space: nowrap; }
+.hr { border: none; border-top: 1px solid var(--border); margin: 10px 0; }
+.note { font-size: 10px; color: var(--muted); line-height: 1.5; font-family: system-ui, sans-serif; margin-top: 5px; }
+
+/* ── Legend ──────────────────────────────────────────────────────────────── */
+.legend {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--muted);
+}
+.dot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  margin-right: 5px;
+  vertical-align: middle;
+}
+
+/* ── Footer / Controls ───────────────────────────────────────────────────── */
+.footer {
+  border-top: 1px solid var(--border);
+  background: var(--surface);
+  padding: 12px 24px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.controls { display: flex; gap: 10px; flex-wrap: wrap; }
+.statusBar { flex: 1; font-size: 12px; font-family: var(--mono); }
+.status      { color: var(--muted); }
+.statusError { color: #FF4444; }
+
+/* Buttons */
+.btnStart, .btnStop, .btnZoom, .btnCalib {
+  padding: 8px 20px;
+  border: none;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.2s, background 0.2s, box-shadow 0.2s;
+}
+.btnStart, .btnStop, .btnZoom, .btnCalib { opacity: 1; }
+.btnStart:disabled, .btnStop:disabled, .btnZoom:disabled, .btnCalib:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.btnStart { background: var(--accent); color: #000; }
+.btnStart:not(:disabled):hover { opacity: 0.85; }
+.btnStop  { background: #FF4444; color: #fff; }
+.btnStop:not(:disabled):hover { opacity: 0.85; }
+.btnZoomOff { background: var(--surface); color: #AA44FF; border: 1.5px solid #AA44FF; }
+.btnZoomOff:not(:disabled):hover { background: rgba(170,68,255,0.12); }
+.btnZoomOn  { background: #AA44FF; color: #fff; box-shadow: 0 0 12px rgba(170,68,255,0.5); }
+.btnZoomOn:not(:disabled):hover  { opacity: 0.85; }
+.btnCalib   { background: var(--surface); color: #44AAFF; border: 1.5px solid #44AAFF; }
+.btnCalib:not(:disabled):hover   { background: rgba(68,170,255,0.12); }
+.btnCalibrated { background: rgba(68,170,255,0.15); box-shadow: 0 0 10px rgba(68,170,255,0.4); }
+
+/* ── Calibration overlay ─────────────────────────────────────────────────── */
+.calibOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  background: rgba(0, 0, 0, 0.85);
+  pointer-events: all;
+}
+.calibInstr {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  color: var(--text);
+  font-family: system-ui, sans-serif;
+  font-size: 18px;
+  text-align: center;
+  line-height: 1.8;
+  pointer-events: none;
+  text-shadow: 0 2px 8px #000;
+}
+
+/* ── Calibration dot (fixed, outside layout flow) ────────────────────────── */
+.calibDot {
+  position: fixed;
+  z-index: 10001;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: #00FF88;
+  border: 3px solid #fff;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  animation: calibPulse 1s ease-out infinite;
+}
+.dotLabel {
+  position: absolute;
+  top: 38px;
+  left: 50%;
+  transform: translateX(-50%);
+  color: #fff;
+  font-family: monospace;
+  font-size: 12px;
+  white-space: nowrap;
+  text-shadow: 0 1px 4px #000;
+}
+.progressArc {
+  position: absolute;
+  inset: -7px;
+  border-radius: 50%;
+  border: 3px solid transparent;
+  border-top-color: #FFD700;
+  transition: transform 0.08s linear;
+}
+@keyframes calibPulse {
+  0%   { box-shadow: 0 0 0 0   rgba(0, 255, 136, 0.75); }
+  70%  { box-shadow: 0 0 0 16px rgba(0, 255, 136, 0); }
+  100% { box-shadow: 0 0 0 0   rgba(0, 255, 136, 0); }
+}
+
+/* ── Live gaze dot ───────────────────────────────────────────────────────── */
+.gazeDot {
+  position: fixed;
+  z-index: 9999;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: rgba(255, 55, 55, 0.80);
+  border: 2px solid rgba(255, 255, 255, 0.85);
+  box-shadow: 0 0 14px rgba(255, 55, 55, 0.65);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  will-change: left, top;
+  transition: left 0.05s linear, top 0.05s linear;
+}
+
+/* ── Debug value classes (used via direct DOM, not CSS modules) ──────────── */
+:global(.val)         { color: var(--text, #e6edf3); font-weight: 600; }
+:global(.val.yes)     { color: #00FF88; }
+:global(.val.no)      { color: #FF4444; }
+:global(.val.fps)     { color: #FFD700; }
+:global(.val.covered) { color: #FF4444; font-weight: 900; text-shadow: 0 0 6px rgba(255,68,68,0.5); }
+:global(.val.clear-eye) { color: #8b949e; font-weight: 400; }
+:global(.val.pdMm)    { color: #FFD700; }
+:global(.val.distOk)  { color: #00FF88; }
+:global(.val.distClose)  { color: #FF8800; font-weight: 700; }
+:global(.val.distDanger) { color: #FF4444; font-weight: 900; text-shadow: 0 0 6px rgba(255,68,68,0.5); }
+:global(.val.zoomOn)  { color: #AA44FF; }
+:global(.val.zoomOff) { color: #8b949e; }
+
+/* ── Responsive ──────────────────────────────────────────────────────────── */
+@media (max-width: 600px) {
+  .main         { padding: 10px; gap: 10px; }
+  .debugPanel   { flex: 1 1 100%; order: 2; }
+  .viewportWrap { order: 1; }
+  .header       { padding: 12px 16px; }
+  .footer       { padding: 10px 16px; }
+}
