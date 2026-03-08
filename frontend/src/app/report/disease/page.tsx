@@ -385,8 +385,8 @@ export default function DiseaseReportPage() {
   const [narrationLines, setNarrationLines] = useState<string[]>([]);
   const [showNarrationPrompt, setShowNarrationPrompt] = useState(false);
   const [pageExiting, setPageExiting] = useState(false);
+  const [hasStarted, setHasStarted] = useState(false);
   const { lineIdx, playing, loading: ttsLoading, start, stop, replay } = useElevenLabsNarration();
-  const hasStarted = useRef(false);
 
   const handleBack = () => {
     stop();
@@ -395,36 +395,62 @@ export default function DiseaseReportPage() {
   };
 
   useEffect(() => {
-    try {
-      const raw = localStorage.getItem("irisDetectionResults");
-      setInput(raw ? JSON.parse(raw) : MOCK_INPUT);
-    } catch {
-      setInput(MOCK_INPUT);
-    }
+    let cancelled = false;
+
+    const loadInput = async () => {
+      setInputError("");
+
+      let storedInput: DetectionInput | null = null;
+      try {
+        const raw = localStorage.getItem("irisDetectionResults");
+        storedInput = raw ? (JSON.parse(raw) as DetectionInput) : null;
+      } catch {
+        storedInput = null;
+      }
+
+      const token = localStorage.getItem("token");
+      if (token) {
+        const history = await fetchEyeDiagnosticHistory(token);
+        if (cancelled) return;
+
+        setDiagnosticHistory(history);
+        if (history.length > 0) {
+          setInput(mapHistoryToInput(history[0]));
+          return;
+        }
+      }
+
+      if (cancelled) return;
+
+      if (storedInput) {
+        setInput(storedInput);
+        return;
+      }
+
+      setInput(null);
+      setInputError("No diagnostic data found in your account history.");
+      setPageLoading(false);
+    };
+
+    loadInput();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {
     if (!input) return;
     setPageLoading(true);
-    const cached = localStorage.getItem("irisDetectionReport");
-    if (cached) {
-      try {
-        const r = JSON.parse(cached) as DetectionReport;
-        setReport(r);
-        setNarrationLines(buildNarrationScript(input, r));
-        setPageLoading(false);
-        setShowNarrationPrompt(true);
-        return;
-      } catch { /* fall through to regenerate */ }
-    }
-    generateDetectionReport(input).then(r => {
+
+    generateDetectionReport(input, diagnosticHistory).then(r => {
       setReport(r);
-      setNarrationLines(buildNarrationScript(resolvedInput, r));
+      setNarrationLines(buildNarrationScript(input, r));
       setPageLoading(false);
       setShowNarrationPrompt(true);
       try { localStorage.setItem("irisDetectionReport", JSON.stringify(r)); } catch {}
     });
-  }, [input]);
+  }, [diagnosticHistory, input]);
 
   const isNormal = input?.result === "normal";
   const resultColor = isNormal ? C.green : C.amber;
