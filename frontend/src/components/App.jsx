@@ -1,6 +1,7 @@
 "use client";
-import { useState, useRef, useEffect } from "react";
+import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { useRouter } from "next/navigation";
 import Starsfield from "./Starsfield.js";
 import PanelOverlay from "./PanelOverlay.jsx";
 import AppleHelloEffect from "./AppleHelloEffect.js";
@@ -89,23 +90,24 @@ function FeatureCard({ card, onClick }) {
 }
 
 export default function App() {
+  const router = useRouter();
   const [clicked, setClicked] = useState(false);
   const [activePanelIndex, setActivePanelIndex] = useState(null);
   const [originRect, setOriginRect] = useState(null);
-  const [messageOpen, setMessageOpen] = useState(false);
   const [loginPanelOpen, setLoginPanelOpen] = useState(false);
   const [signupPanelOpen, setSignupPanelOpen] = useState(false);
   const [loginOriginRect, setLoginOriginRect] = useState(null);
   const [signupOriginRect, setSignupOriginRect] = useState(null);
-  const [user, setUser] = useState(null);
-  const [isUserOpen, setIsUserOpen] = useState(false);
-
-  useEffect(() => {
-    const storedUser = localStorage.getItem("user");
-    if (storedUser) {
-      setUser(JSON.parse(storedUser));
+  const [user, setUser] = useState(() => {
+    if (typeof window === "undefined") return null;
+    try {
+      const storedUser = localStorage.getItem("user");
+      return storedUser ? JSON.parse(storedUser) : null;
+    } catch {
+      return null;
     }
-  }, []);
+  });
+  const [isUserOpen, setIsUserOpen] = useState(false);
 
   const handleHeroClick = () => {
     setClicked(true);
@@ -434,6 +436,10 @@ export default function App() {
               key={i}
               card={card}
               onClick={(e) => {
+                if (i === 2) {
+                  router.push("/report/disease");
+                  return;
+                }
                 setOriginRect(e.currentTarget.getBoundingClientRect());
                 setActivePanelIndex(i);
               }}

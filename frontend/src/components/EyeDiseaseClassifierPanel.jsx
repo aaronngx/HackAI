@@ -50,7 +50,40 @@ export default function EyeDiseaseClassifierPanel({ onBack }) {
         return;
       }
 
-      setResult(data.result || null);
+      const analysisResult = data.result || null;
+      setResult(analysisResult);
+
+      if (analysisResult) {
+        const parsedConfidence = Number.parseFloat(
+          String(analysisResult.confidence ?? "")
+        );
+
+        const detectionPayload = {
+          result:
+            analysisResult.likely_disease &&
+            String(analysisResult.likely_disease).toLowerCase() !== "normal"
+              ? "condition_detected"
+              : "normal",
+          conditionName: analysisResult.likely_disease || undefined,
+          confidence: Number.isFinite(parsedConfidence)
+            ? parsedConfidence
+            : undefined,
+          affectedEye: "both",
+          imageDate: new Date().toISOString(),
+          shortReport: analysisResult.short_report || undefined,
+          visibleFindings: Array.isArray(analysisResult.visible_findings)
+            ? analysisResult.visible_findings
+            : [],
+          medicalDisclaimer: analysisResult.medical_disclaimer || undefined,
+          diagnosticId: data.diagnosticId || null,
+          saved: Boolean(data.saved),
+        };
+
+        localStorage.setItem(
+          "irisDetectionResults",
+          JSON.stringify(detectionPayload)
+        );
+      }
     } catch (err) {
       setError(err.message || "Failed to analyze image.");
     } finally {
