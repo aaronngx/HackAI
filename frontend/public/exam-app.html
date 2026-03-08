@@ -1,0 +1,1124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Eye Exam Tracker</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      background: #0a0a0f;
+      color: #e0e0e0;
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    header {
+      padding: 8px 20px;
+      background: #111118;
+      border-bottom: 1px solid #222;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      flex-shrink: 0;
+    }
+    header h1 { font-size: 16px; color: #00FF88; letter-spacing: 1px; }
+    header p  { font-size: 11px; color: #666; }
+
+    main {
+      display: flex;
+      flex: 1;
+      overflow: hidden;
+      min-height: 0;
+    }
+
+    #viewport-wrap {
+      position: relative;
+      flex: 1;
+      background: #000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+    }
+
+    #video  { position: absolute; opacity: 0; width: 1px; height: 1px; }
+    #canvas { max-width: 100%; max-height: 100%; object-fit: contain; }
+
+    #loading-overlay {
+      position: absolute;
+      inset: 0;
+      background: rgba(0,0,0,0.85);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
+      font-size: 14px;
+      color: #aaa;
+    }
+    .spinner {
+      width: 40px; height: 40px;
+      border: 3px solid #333;
+      border-top-color: #00FF88;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── Debug text panel ─────────────────────────────────── */
+    #debug-panel {
+      width: 220px;
+      background: #111118;
+      border-left: 1px solid #222;
+      padding: 10px;
+      overflow-y: auto;
+      font-size: 11px;
+      flex-shrink: 0;
+    }
+    #debug-panel h2 { color: #00FF88; font-size: 12px; margin-bottom: 6px; }
+    .dbg-label { color: #666; padding: 1px 0; }
+    .dbg-val   { color: #ccc; font-weight: 600; }
+    .dbg-yes   { color: #00FF88; }
+    .dbg-no    { color: #FF4444; }
+    .dbg-warn  { color: #FFD700; }
+    hr { border: none; border-top: 1px solid #222; margin: 5px 0; }
+    .section-label {
+      color: #888; font-size: 10px; text-transform: uppercase;
+      letter-spacing: 1px; margin: 5px 0 2px;
+    }
+    table { width: 100%; border-collapse: collapse; }
+    td { padding: 1px 0; vertical-align: top; }
+    td:first-child { color: #666; width: 95px; }
+
+    /* ── 3-D debug canvas strip ───────────────────────────── */
+    #debug3d-section {
+      display: none;
+      flex-shrink: 0;
+      background: #080810;
+      border-top: 1px solid #1a1a2a;
+      height: 260px;
+      position: relative;
+    }
+    #debug3d {
+      width: 100%;
+      height: 100%;
+      cursor: grab;
+      display: block;
+    }
+    #debug3d:active { cursor: grabbing; }
+
+    /* ── Footer ───────────────────────────────────────────── */
+    footer {
+      background: #111118;
+      border-top: 1px solid #222;
+      padding: 8px 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+      flex-shrink: 0;
+    }
+    .controls { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+
+    button {
+      padding: 6px 13px;
+      border: none;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity 0.15s;
+    }
+    button:disabled { opacity: 0.35; cursor: not-allowed; }
+
+    #btn-start  { background: #00FF88; color: #000; }
+    #btn-stop   { background: #FF4444; color: #fff; }
+    #btn-zoom   { background: #2255FF; color: #fff; }
+    #btn-lock   { background: #FF9900; color: #000; }
+    #btn-calib  { background: #FFD700; color: #000; }
+    #btn-debug3d{ background: #334; color: #aaa; border: 1px solid #445; }
+
+    #status-bar { font-size: 11px; color: #888; }
+    #status-bar.error { color: #FF6666; }
+
+    /* ── WS indicator ─────────────────────────────────────── */
+    #ws-dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: #444;
+      display: inline-block;
+      margin-right: 4px;
+      flex-shrink: 0;
+    }
+    #ws-dot.connected { background: #00FF88; }
+    #ws-dot.error     { background: #FF4444; }
+
+    /* ── Fullscreen calibration overlay ──────────────────── */
+    #calib-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.92);
+      z-index: 100;
+    }
+    #calib-instr {
+      display: none;
+      position: fixed;
+      top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      background: #1a1a2e;
+      border: 1px solid #00FF88;
+      border-radius: 12px;
+      padding: 28px;
+      max-width: 460px;
+      text-align: center;
+      z-index: 101;
+      line-height: 1.7;
+    }
+    #calib-dot {
+      display: none;
+      position: fixed;
+      width: 20px; height: 20px;
+      background: #FFD700;
+      border-radius: 50%;
+      transform: translate(-50%, -50%);
+      z-index: 102;
+      box-shadow: 0 0 12px #FFD700;
+      animation: pulse 0.9s ease-in-out infinite alternate;
+    }
+    @keyframes pulse {
+      from { transform: translate(-50%,-50%) scale(1); }
+      to   { transform: translate(-50%,-50%) scale(1.35); }
+    }
+    #calib-label {
+      position: fixed; color: #fff; font-size: 12px;
+      transform: translate(-50%, 20px);
+      z-index: 103; white-space: nowrap;
+    }
+    #gaze-dot {
+      display: none;
+      position: fixed;
+      width: 14px; height: 14px;
+      background: rgba(0,255,136,0.75);
+      border-radius: 50%;
+      transform: translate(-50%, -50%);
+      pointer-events: none;
+      z-index: 50;
+      box-shadow: 0 0 8px #00FF88;
+      transition: left 0.05s, top 0.05s;
+    }
+
+    #gaze-direction-label {
+      position: fixed;
+      bottom: 80px; left: 50%;
+      transform: translateX(-50%);
+      font-size: 36px;
+      font-weight: 900;
+      letter-spacing: 3px;
+      color: #FFD700;
+      text-shadow: 0 0 16px #FFD700, 0 2px 6px #000;
+      background: rgba(0,0,0,0.55);
+      padding: 6px 22px;
+      border-radius: 10px;
+      pointer-events: none;
+      z-index: 200;
+      display: none;
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1>Eye Exam Tracker</h1>
+    <p>Eye-sphere · PCA head pose · Orbit debug · WebSocket gaze output</p>
+  </div>
+  <div style="margin-left:auto;display:flex;align-items:center;gap:6px;font-size:11px;color:#666">
+    <span id="ws-dot"></span><span id="ws-label">WS: off</span>
+  </div>
+</header>
+
+<main>
+  <div id="viewport-wrap">
+    <video id="video" autoplay playsinline muted></video>
+    <canvas id="canvas"></canvas>
+    <div id="gaze-direction-label"></div>
+    <div id="loading-overlay">
+      <div class="spinner"></div>
+      <span id="loading-msg">Loading MediaPipe…</span>
+    </div>
+  </div>
+
+  <aside id="debug-panel">
+    <h2>Debug</h2>
+    <table><tbody>
+      <tr><td>Hand</td>     <td><span id="d-hand"  class="dbg-val">—</span></td></tr>
+      <tr><td>Face</td>     <td><span id="d-face"  class="dbg-val">—</span></td></tr>
+      <tr><td>Direction</td><td><span id="d-dir"   class="dbg-val">—</span></td></tr>
+    </tbody></table>
+
+    <hr/><div class="section-label">Eye spheres</div>
+    <table><tbody>
+      <tr><td>Lock status</td><td><span id="d-sphere" class="dbg-val">—</span></td></tr>
+    </tbody></table>
+
+    <hr/><div class="section-label">Eye openness (EAR)</div>
+    <table><tbody>
+      <tr><td>Right eye</td><td><span id="d-ear-r" class="dbg-val">—</span></td></tr>
+      <tr><td>Left eye</td> <td><span id="d-ear-l" class="dbg-val">—</span></td></tr>
+    </tbody></table>
+
+    <hr/><div class="section-label">Hand over eye</div>
+    <table><tbody>
+      <tr><td>Right</td><td><span id="d-cov-r" class="dbg-val">—</span></td></tr>
+      <tr><td>Left</td> <td><span id="d-cov-l" class="dbg-val">—</span></td></tr>
+    </tbody></table>
+
+    <hr/><div class="section-label">Pupillary distance</div>
+    <table><tbody>
+      <tr><td>PD (px)</td> <td><span id="d-pd-px" class="dbg-val">—</span></td></tr>
+      <tr><td>PD (mm)</td> <td><span id="d-pd-mm" class="dbg-val">—</span></td></tr>
+    </tbody></table>
+
+    <hr/><div class="section-label">Distance</div>
+    <table><tbody>
+      <tr><td>From cam</td><td><span id="d-dist" class="dbg-val">—</span></td></tr>
+    </tbody></table>
+
+    <hr/><div class="section-label">Gaze</div>
+    <table><tbody>
+      <tr><td>Direction</td> <td><span id="d-gaze-dir" class="dbg-val">—</span></td></tr>
+      <tr><td>Iris H</td>    <td><span id="d-iris-h"  class="dbg-val">—</span></td></tr>
+      <tr><td>Iris V</td>    <td><span id="d-iris-v"  class="dbg-val">—</span></td></tr>
+      <tr><td>Yaw</td>       <td><span id="d-yaw"   class="dbg-val">—</span></td></tr>
+      <tr><td>Pitch</td>     <td><span id="d-pitch"  class="dbg-val">—</span></td></tr>
+      <tr><td>Screen X</td>  <td><span id="d-sx"     class="dbg-val">—</span></td></tr>
+      <tr><td>Screen Y</td>  <td><span id="d-sy"     class="dbg-val">—</span></td></tr>
+      <tr><td>Calibration</td><td><span id="d-calib" class="dbg-val">—</span></td></tr>
+    </tbody></table>
+
+    <hr/>
+    <table><tbody>
+      <tr><td>Zoom</td><td><span id="d-zoom" class="dbg-val">OFF</span></td></tr>
+      <tr><td>FPS</td> <td><span id="d-fps"  class="dbg-val">0</span></td></tr>
+    </tbody></table>
+
+    <hr/>
+    <div style="font-size:10px;line-height:1.8;color:#555">
+      <div><span style="color:#00FF88">●</span> Hand (cam-right)</div>
+      <div><span style="color:#FF8800">●</span> Hand (cam-left)</div>
+      <div><span style="color:#FFD700">●</span> Face oval</div>
+      <div><span style="color:#44AAFF">●</span> Right iris</div>
+      <div><span style="color:#FF44AA">●</span> Left iris</div>
+    </div>
+  </aside>
+</main>
+
+<!-- 3-D debug canvas (toggled) -->
+<section id="debug3d-section">
+  <canvas id="debug3d"></canvas>
+</section>
+
+<footer>
+  <div class="controls">
+    <button id="btn-start"   disabled>Start Camera</button>
+    <button id="btn-stop"    disabled>Stop Camera</button>
+    <button id="btn-zoom"    disabled>Focus Face</button>
+    <button id="btn-lock"    disabled>Lock Eyes (C)</button>
+    <button id="btn-calib"   disabled>Calibrate Gaze</button>
+    <button id="btn-debug3d">3D Debug</button>
+  </div>
+  <div id="status-bar">Initializing…</div>
+</footer>
+
+<!-- Calibration overlay -->
+<div id="calib-overlay" onclick="handleOverlayClick()"></div>
+<div id="calib-instr"></div>
+<div id="calib-dot"><div id="calib-label"></div></div>
+<div id="gaze-dot"></div>
+
+<script type="module">
+// ─────────────────────────────────────────────────────────────────────────────
+// Imports
+// ─────────────────────────────────────────────────────────────────────────────
+import {
+  drawFace, computeEAR, computePD,
+  faceBBox, toScreen, lerp,
+  R_EAR_IDX, L_EAR_IDX,
+  polyBasis, evalPoly, leastSquares,
+} from '/face-eye-tracker.js';
+
+import {
+  drawHand, classifyDirection, smoothDirection,
+  detectHandOverEye, drawDirectionLabel,
+} from '/hand-tracker.js';
+
+import {
+  getNosePoints3d, stabilizeR, lockSphere, getSphereWorld,
+  gazeDir, GazeDeque, gazeToScreen, createMonitorPlane,
+  computePCA3, computeScale,
+} from '/eye-sphere.js';
+
+import { Debug3D } from '/debug3d.js';
+
+// ─────────────────────────────────────────────────────────────────────────────
+// MediaPipe model URLs
+// ─────────────────────────────────────────────────────────────────────────────
+const WASM_PATH  = '/mediapipe-wasm';
+const HAND_MODEL = 'https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task';
+const FACE_MODEL = 'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task';
+
+// ─────────────────────────────────────────────────────────────────────────────
+// DOM refs
+// ─────────────────────────────────────────────────────────────────────────────
+const video      = document.getElementById('video');
+const canvas     = document.getElementById('canvas');
+const ctx        = canvas.getContext('2d');
+const loadingEl  = document.getElementById('loading-overlay');
+const loadMsg    = document.getElementById('loading-msg');
+const statusBar  = document.getElementById('status-bar');
+const btnStart   = document.getElementById('btn-start');
+const btnStop    = document.getElementById('btn-stop');
+const btnZoom    = document.getElementById('btn-zoom');
+const btnLock    = document.getElementById('btn-lock');
+const btnCalib   = document.getElementById('btn-calib');
+const btnDebug3d = document.getElementById('btn-debug3d');
+const debug3dSec = document.getElementById('debug3d-section');
+const debug3dCvs = document.getElementById('debug3d');
+const wsDot      = document.getElementById('ws-dot');
+const wsLabel    = document.getElementById('ws-label');
+const D = id => document.getElementById(id);
+
+function setStatus(msg, isError = false) {
+  statusBar.textContent = msg;
+  statusBar.className = isError ? 'error' : '';
+}
+function setD(id, text, cls = '') {
+  const el = D(id); if (!el) return;
+  el.textContent = text;
+  el.className = 'dbg-val' + (cls ? ' dbg-' + cls : '');
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// State
+// ─────────────────────────────────────────────────────────────────────────────
+let handLandmarker = null, faceLandmarker = null;
+let stream = null, animId = null, running = false;
+let zoomEnabled = false, smoothCrop = null;
+let frameCount = 0, lastFpsTime = 0, fps = 0;
+
+// Eye-sphere state
+let Rref        = null;   // first-frame PCA rotation (stabilization anchor)
+let leftSphere  = null;   // { localOffset, noseScale }
+let rightSphere = null;
+let monitorPlane = null;  // { corners, center, normal, upc }
+let gazeMarkers = [];
+const gazeDeque = new GazeDeque(10);
+
+// Calibration (polynomial gaze → screen)
+let calibrated = false, calibCoeffsX = null, calibCoeffsY = null;
+let calibState = 'IDLE'; // IDLE | LOCK | INTRO | RUNNING | DONE
+let calibPairs = [], calibSamples = [], calibFrames = 0, pointIdx = 0;
+
+const CALIB_GRID = [
+  [0.15,0.15],[0.50,0.15],[0.85,0.15],
+  [0.15,0.50],[0.50,0.50],[0.85,0.50],
+  [0.15,0.85],[0.50,0.85],[0.85,0.85],
+];
+const N_LOCK = 30, N_SETTLE = 20, N_COLLECT = 40;
+
+const dirBuf = [];
+
+// ── Iris-in-eye ratio gaze classifier ────────────────────────────────────────
+// Measures where the iris sits inside the eye socket — works without lock eyes.
+// Landmark indices (MediaPipe Face Mesh):
+//   Right eye: outer=33 (ear side), inner=133 (nose side), top=159, bottom=145
+//   Left  eye: inner=362 (nose side), outer=263 (ear side), top=386, bottom=374
+//   Irises: right=468, left=473
+const IRIS_H_THRESH = 0.12;  // offset from 0.5 to count as left/right
+const IRIS_V_THRESH = 0.10;  // offset from 0.5 to count as up/down
+
+// EMA smoothing state for iris ratios
+let _irisRX = 0.5, _irisRY = 0.5;
+const IRIS_EMA = 0.25; // smoothing factor (lower = smoother)
+
+function classifyIrisGaze(lms) {
+  if (!lms[468] || !lms[473]) return null;
+
+  // ── Horizontal ───────────────────────────────────────────────────────────
+  // Right eye: ratio 0 = iris at outer (user looking right), 1 = at inner (left)
+  const rEyeW = lms[133].x - lms[33].x;
+  const rRX   = rEyeW > 0.001 ? (lms[468].x - lms[33].x)  / rEyeW  : 0.5;
+
+  // Left eye: inner corner (362) has smaller x, outer (263) has larger x
+  // ratio 0 = iris at inner (user looking right), 1 = at outer (left)
+  const lEyeW = lms[263].x - lms[362].x;
+  const lRX   = lEyeW > 0.001 ? (lms[473].x - lms[362].x) / lEyeW  : 0.5;
+
+  // ── Vertical ─────────────────────────────────────────────────────────────
+  // ratio 0 = iris at top (looking up), 1 = at bottom (looking down)
+  const rEyeH = lms[145].y - lms[159].y;
+  const rRY   = rEyeH > 0.001 ? (lms[468].y - lms[159].y) / rEyeH  : 0.5;
+
+  const lEyeH = lms[374].y - lms[386].y;
+  const lRY   = lEyeH > 0.001 ? (lms[473].y - lms[386].y) / lEyeH  : 0.5;
+
+  // ── Average & smooth ─────────────────────────────────────────────────────
+  const rawRX = (rRX + lRX) / 2;
+  const rawRY = (rRY + lRY) / 2;
+  _irisRX += (rawRX - _irisRX) * IRIS_EMA;
+  _irisRY += (rawRY - _irisRY) * IRIS_EMA;
+
+  // ── Classify ─────────────────────────────────────────────────────────────
+  const hOff = _irisRX - 0.5; // positive = LEFT, negative = RIGHT
+  const vOff = _irisRY - 0.5; // positive = DOWN, negative = UP
+  const absH = Math.abs(hOff), absV = Math.abs(vOff);
+
+  let dir;
+  if (absH < IRIS_H_THRESH && absV < IRIS_V_THRESH) {
+    dir = 'CENTER';
+  } else if (absH >= absV) {
+    dir = hOff > 0 ? 'LEFT' : 'RIGHT';
+  } else {
+    dir = vOff > 0 ? 'DOWN' : 'UP';
+  }
+
+  return { dir, ratioX: _irisRX, ratioY: _irisRY };
+}
+
+// 3-D debug view
+let debug3dView = null;
+let show3d = false;
+
+// Cache last face/iris for use outside the face block
+let lastFaceLms = null;
+let lastHeadCenter = null, lastR = null, lastNoseScale = null;
+let lastSphereWL = null, lastSphereWR = null;
+let lastIris3dL = null, lastIris3dR = null;
+let lastCombinedDir = null;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// WebSocket  (connects to /gaze-ws on the same host)
+// ─────────────────────────────────────────────────────────────────────────────
+let ws = null;
+let wsRetryTimer = null;   // single pending retry timer
+let wsEnabled = false;     // only retry while camera is running
+
+function connectWS() {
+  // Prevent multiple parallel sockets
+  if (ws && ws.readyState <= WebSocket.OPEN) ws.close();
+  clearTimeout(wsRetryTimer);
+
+  const url = `ws://${location.host}/gaze-ws`;
+  try {
+    ws = new WebSocket(url);
+  } catch (e) {
+    return;
+  }
+
+  ws.onopen = () => {
+    wsDot.className = 'connected';
+    wsLabel.textContent = 'WS: live';
+  };
+  ws.onclose = () => {
+    wsDot.className = '';
+    wsLabel.textContent = 'WS: off';
+    // Only retry if the camera is still running
+    if (wsEnabled) {
+      wsRetryTimer = setTimeout(connectWS, 3000);
+    }
+  };
+  ws.onerror = () => {
+    wsDot.className = 'error';
+    wsLabel.textContent = 'WS: err';
+    // onerror is always followed by onclose — retry handled there
+  };
+}
+
+function disconnectWS() {
+  wsEnabled = false;
+  clearTimeout(wsRetryTimer);
+  if (ws) { ws.close(); ws = null; }
+  wsDot.className = '';
+  wsLabel.textContent = 'WS: off';
+}
+
+function sendGaze(data) {
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify(data));
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Calibration helpers
+// ─────────────────────────────────────────────────────────────────────────────
+function showCalibIntro() {
+  D('calib-overlay').style.display = 'block';
+  const instr = D('calib-instr');
+  instr.style.display = 'block';
+  instr.innerHTML = `
+    <strong style="color:#00FF88;font-size:18px">Gaze Calibration</strong><br><br>
+    Eye spheres are locked. Now follow <strong>9 dots</strong> around the screen.<br><br>
+    Keep your <strong>head still</strong>. Look directly at each dot.<br><br>
+    <span style="color:#FFD700">Click anywhere or press <strong>Space</strong> to begin.</span>
+  `;
+  D('calib-dot').style.display = 'none';
+}
+
+function hideCalib() {
+  D('calib-overlay').style.display  = 'none';
+  D('calib-instr').style.display    = 'none';
+  D('calib-dot').style.display      = 'none';
+}
+
+function showDot(sx, sy, label) {
+  D('calib-instr').style.display = 'none';
+  const dot = D('calib-dot');
+  dot.style.display = 'block';
+  dot.style.left = `${sx * 100}vw`;
+  dot.style.top  = `${sy * 100}vh`;
+  D('calib-label').textContent = label;
+}
+
+function showGazeDot(sx, sy) {
+  const d = D('gaze-dot');
+  d.style.display = 'block';
+  d.style.left = `${(sx / window.innerWidth)  * 100}vw`;
+  d.style.top  = `${(sy / window.innerHeight) * 100}vh`;
+}
+function hideGazeDot() { D('gaze-dot').style.display = 'none'; }
+
+window.handleOverlayClick = () => {
+  if (calibState === 'INTRO') {
+    calibState = 'RUNNING';
+    calibPairs = []; calibSamples = []; calibFrames = 0; pointIdx = 0;
+    showDot(CALIB_GRID[0][0], CALIB_GRID[0][1], `1 / ${CALIB_GRID.length}`);
+  }
+};
+document.addEventListener('keydown', e => {
+  if (e.code === 'Space' && calibState === 'INTRO') {
+    e.preventDefault();
+    window.handleOverlayClick();
+  }
+  // C = lock eyes
+  if (e.code === 'KeyC' && running) lockEyes();
+  // X = add gaze marker (debug3d)
+  if (e.code === 'KeyX') addGazeMarker();
+});
+
+function tryFitCalib() {
+  try {
+    const A  = calibPairs.map(p => polyBasis(p.u, p.v));
+    const bx = calibPairs.map(p => p.sx);
+    const by = calibPairs.map(p => p.sy);
+    calibCoeffsX = leastSquares(A, bx);
+    calibCoeffsY = leastSquares(A, by);
+    calibrated = true;
+    calibState = 'DONE';
+    hideCalib();
+    btnCalib.textContent = 'Recalibrate';
+    setD('d-calib', 'READY', 'yes');
+    setStatus('Calibrated — gaze dot active.');
+  } catch (e) {
+    calibState = 'IDLE';
+    hideCalib();
+    setStatus('Calibration failed — try again.', true);
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Eye-sphere locking
+// ─────────────────────────────────────────────────────────────────────────────
+function lockEyes() {
+  if (!lastFaceLms || !lastHeadCenter || !lastR) {
+    setStatus('Face not detected — try again.', true);
+    return;
+  }
+  const vw = video.videoWidth, vh = video.videoHeight;
+  const faceLms = lastFaceLms;
+
+  const iris3dL = [faceLms[473].x*vw, faceLms[473].y*vh, faceLms[473].z*vw];
+  const iris3dR = [faceLms[468].x*vw, faceLms[468].y*vh, faceLms[468].z*vw];
+
+  leftSphere  = lockSphere(iris3dL, lastHeadCenter, lastR, lastNoseScale);
+  rightSphere = lockSphere(iris3dR, lastHeadCenter, lastR, lastNoseScale);
+  gazeDeque.reset();
+
+  // Build 3-D monitor plane using current gaze direction as hint
+  const dL = gazeDir(iris3dL, lastSphereWL || lastHeadCenter);
+  const dR = gazeDir(iris3dR, lastSphereWR || lastHeadCenter);
+  const fwdHint = [
+    (dL[0]+dR[0])/2, (dL[1]+dR[1])/2, (dL[2]+dR[2])/2,
+  ];
+  const origin = [
+    (iris3dL[0]+iris3dR[0])/2,
+    (iris3dL[1]+iris3dR[1])/2,
+    (iris3dL[2]+iris3dR[2])/2,
+  ];
+  monitorPlane = createMonitorPlane(
+    lastHeadCenter, lastR, faceLms, vw, vh, fwdHint, origin, fwdHint
+  );
+
+  setStatus('Eyes locked — click "Calibrate Gaze" to begin calibration.');
+  setD('d-sphere', 'LOCKED', 'yes');
+  btnCalib.disabled = false;
+  console.log('[EyeSphere] locked. monitor center:', monitorPlane.center);
+}
+
+function addGazeMarker() {
+  if (!monitorPlane || !lastCombinedDir || !lastSphereWL || !lastSphereWR) return;
+  const { corners, center, normal } = monitorPlane;
+  const { v3add: add, v3sub: sub, v3scale: sc, v3normalize: norm, v3dot: dot } =
+    { v3add:(a,b)=>[a[0]+b[0],a[1]+b[1],a[2]+b[2]],
+      v3sub:(a,b)=>[a[0]-b[0],a[1]-b[1],a[2]-b[2]],
+      v3scale:(v,s)=>[v[0]*s,v[1]*s,v[2]*s],
+      v3normalize:v=>{const n=Math.hypot(...v);return n>1e-9?[v[0]/n,v[1]/n,v[2]/n]:v;},
+      v3dot:(a,b)=>a[0]*b[0]+a[1]*b[1]+a[2]*b[2] };
+  const O = sc(add(lastSphereWL,lastSphereWR),0.5);
+  const D = norm(lastCombinedDir);
+  const N = norm(normal);
+  const denom = dot(N, D);
+  if (Math.abs(denom) < 1e-6) return;
+  const t = dot(N, sub(center, O)) / denom;
+  if (t <= 0) return;
+  const P = add(O, sc(D, t));
+  const [p0,p1,,p3] = corners;
+  const u  = sub(p1,p0), v_ = sub(p3,p0);
+  const wv = sub(P,p0);
+  const ul2=dot(u,u), vl2=dot(v_,v_);
+  if (ul2 < 1e-9 || vl2 < 1e-9) return;
+  const a = dot(wv,u)/ul2, b = dot(wv,v_)/vl2;
+  if (a >= 0 && a <= 1 && b >= 0 && b <= 1)
+    gazeMarkers.push([a, b]);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Main render loop
+// ─────────────────────────────────────────────────────────────────────────────
+function renderFrame(timestamp) {
+  if (!running) return;
+  animId = requestAnimationFrame(renderFrame);
+  if (video.videoWidth === 0 || video.readyState < 2) return;
+
+  const vw = video.videoWidth, vh = video.videoHeight;
+  if (canvas.width !== vw) { canvas.width = vw; canvas.height = vh; }
+  const cw = vw, ch = vh;
+
+  // ── Detection ───────────────────────────────────────────────────────────────
+  const hr = handLandmarker.detectForVideo(video, timestamp);
+  const fr = faceLandmarker.detectForVideo(video, timestamp);
+  const hands   = hr.landmarks || [];
+  const faceLms = (fr.faceLandmarks || [])[0] || null;
+  if (faceLms) lastFaceLms = faceLms;
+
+  // ── Zoom crop ───────────────────────────────────────────────────────────────
+  let crop = null;
+  if (zoomEnabled && faceLms) {
+    smoothCrop = lerp(smoothCrop, faceBBox(faceLms, cw, ch), 0.1);
+    crop = smoothCrop;
+  }
+  const ts = toScreen(crop, cw, ch);
+
+  // ── Draw video frame ────────────────────────────────────────────────────────
+  ctx.clearRect(0, 0, cw, ch);
+  if (crop) {
+    ctx.drawImage(video, crop.nx*vw, crop.ny*vh, crop.nw*vw, crop.nh*vh, 0, 0, cw, ch);
+  } else {
+    ctx.save(); ctx.scale(-1,1); ctx.drawImage(video,-cw,0,cw,ch); ctx.restore();
+  }
+
+  // ── Per-frame gaze state ────────────────────────────────────────────────────
+  let combinedDir = null, rawYawDeg = null, rawPitchDeg = null;
+  let screenX = null, screenY = null;
+  let sphereWL = null, sphereWR = null;
+  let iris3dL = null, iris3dR = null;
+  let landmarks3d = null;
+
+  // ── Face block ──────────────────────────────────────────────────────────────
+  let pd = null;
+  if (faceLms) {
+    drawFace(ctx, faceLms, ts, cw);
+    pd = computePD(faceLms, vw, vh);
+
+    // PCA head pose (nose landmarks)
+    const nosePts = getNosePoints3d(faceLms, vw, vh);
+    const { center: headCenter, R } = computePCA3(nosePts);
+    if (!Rref) Rref = R;
+    const Rstab     = stabilizeR(R, Rref);
+    const noseScale = computeScale(nosePts);
+
+    lastHeadCenter = headCenter;
+    lastR          = Rstab;
+    lastNoseScale  = noseScale;
+
+    iris3dL = [faceLms[473].x*vw, faceLms[473].y*vh, faceLms[473].z*vw];
+    iris3dR = [faceLms[468].x*vw, faceLms[468].y*vh, faceLms[468].z*vw];
+    lastIris3dL = iris3dL; lastIris3dR = iris3dR;
+
+    // ── Iris-relative gaze direction (no lock needed) ──────────────────────
+    const irisGaze = classifyIrisGaze(faceLms);
+    if (irisGaze) {
+      const { dir, ratioX, ratioY } = irisGaze;
+      const dirColors  = { LEFT:'#FF8800', RIGHT:'#44AAFF', UP:'#FF44AA', DOWN:'#FFD700', CENTER:'#00FF88' };
+      const dirArrows  = { LEFT:'← LEFT', RIGHT:'RIGHT →', UP:'↑ UP', DOWN:'↓ DOWN', CENTER:'● CENTER' };
+      const dirLabel   = D('gaze-direction-label');
+      dirLabel.textContent = dirArrows[dir] || dir;
+      dirLabel.style.color = dirColors[dir] || '#fff';
+      dirLabel.style.textShadow = `0 0 12px ${dirColors[dir]}`;
+      dirLabel.style.display = 'block';
+      setD('d-gaze-dir', dir, dir === 'CENTER' ? 'yes' : 'warn');
+      D('d-iris-h').textContent = `${ratioX.toFixed(2)} (${ratioX < 0.5 ? 'R' : 'L'})`;
+      D('d-iris-v').textContent = `${ratioY.toFixed(2)} (${ratioY < 0.5 ? 'U' : 'D'})`;
+    }
+
+    // Build 3-D landmarks array for debug view
+    landmarks3d = faceLms.map(lm => [lm.x*vw, lm.y*vh, lm.z*vw]);
+
+    // ── Sphere-based gaze ───────────────────────────────────────────────────
+    if (leftSphere && rightSphere) {
+      sphereWL = getSphereWorld(leftSphere,  headCenter, Rstab, noseScale);
+      sphereWR = getSphereWorld(rightSphere, headCenter, Rstab, noseScale);
+      lastSphereWL = sphereWL; lastSphereWR = sphereWR;
+
+      const dL  = gazeDir(iris3dL, sphereWL);
+      const dR  = gazeDir(iris3dR, sphereWR);
+      const raw = [(dL[0]+dR[0])/2, (dL[1]+dR[1])/2, (dL[2]+dR[2])/2];
+      const mag = Math.hypot(...raw);
+      gazeDeque.push(mag > 1e-9 ? [raw[0]/mag, raw[1]/mag, raw[2]/mag] : raw);
+      combinedDir = gazeDeque.avg();
+      if (combinedDir) {
+        lastCombinedDir = combinedDir;
+        const result = gazeToScreen(
+          combinedDir, 0, 0, window.innerWidth, window.innerHeight
+        );
+        rawYawDeg   = result.rawYaw;
+        rawPitchDeg = result.rawPitch;
+
+        // Polynomial-calibrated screen position
+        if (calibrated && calibCoeffsX) {
+          const b = polyBasis(rawYawDeg, rawPitchDeg);
+          screenX = Math.max(0, Math.min(window.innerWidth,
+                    Math.round(evalPoly(calibCoeffsX, b) * window.innerWidth)));
+          screenY = Math.max(0, Math.min(window.innerHeight,
+                    Math.round(evalPoly(calibCoeffsY, b) * window.innerHeight)));
+          showGazeDot(screenX, screenY);
+        } else {
+          // Fallback: raw angle-based estimate
+          screenX = result.sx;
+          screenY = result.sy;
+        }
+
+        // ── WebSocket output ──────────────────────────────────────────────
+        sendGaze({
+          x: screenX, y: screenY,
+          rawYaw: rawYawDeg, rawPitch: rawPitchDeg,
+          direction: irisGaze?.dir ?? null,
+          calibrated,
+          t: Date.now(),
+        });
+
+        // ── Draw combined gaze ray on video canvas ────────────────────────
+        const origin2d = [(sphereWL[0]+sphereWR[0])/2, (sphereWL[1]+sphereWR[1])/2];
+        const target2d = [
+          origin2d[0] + combinedDir[0] * 120,
+          origin2d[1] + combinedDir[1] * 120,
+        ];
+        ctx.beginPath();
+        ctx.strokeStyle = '#FFFF0A'; ctx.lineWidth = 2;
+        ctx.moveTo(origin2d[0], origin2d[1]);
+        ctx.lineTo(target2d[0], target2d[1]);
+        ctx.stroke();
+      }
+
+      // Draw sphere circles on video canvas
+      const BASE_R = 20;
+      const scaleL = leftSphere.noseScale  > 0 ? noseScale/leftSphere.noseScale  : 1;
+      const scaleR = rightSphere.noseScale > 0 ? noseScale/rightSphere.noseScale : 1;
+      ctx.strokeStyle = '#FFFF19'; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(sphereWL[0], sphereWL[1], BASE_R*scaleL, 0, Math.PI*2); ctx.stroke();
+      ctx.strokeStyle = '#19FFFF';
+      ctx.beginPath(); ctx.arc(sphereWR[0], sphereWR[1], BASE_R*scaleR, 0, Math.PI*2); ctx.stroke();
+    }
+
+    // ── Calibration feeding ─────────────────────────────────────────────────
+    if (calibState === 'LOCK') {
+      calibFrames++;
+      if (calibFrames >= N_LOCK && leftSphere && rightSphere) {
+        calibState = 'INTRO';
+        showCalibIntro();
+      } else if (calibFrames >= N_LOCK) {
+        // spheres must be locked first
+        calibState = 'IDLE';
+        hideCalib();
+        setStatus('Lock eyes first (press C), then calibrate.', true);
+      }
+    } else if (calibState === 'RUNNING' && combinedDir) {
+      calibFrames++;
+      if (calibFrames > N_SETTLE) {
+        calibSamples.push({ yaw: rawYawDeg, pitch: rawPitchDeg });
+        if (calibSamples.length >= N_COLLECT) {
+          const n  = calibSamples.length;
+          const mu = {
+            yaw:   calibSamples.reduce((s,p) => s+p.yaw,   0) / n,
+            pitch: calibSamples.reduce((s,p) => s+p.pitch, 0) / n,
+          };
+          const [sx, sy] = CALIB_GRID[pointIdx];
+          calibPairs.push({ u: mu.yaw, v: mu.pitch, sx, sy });
+          calibSamples = []; calibFrames = 0; pointIdx++;
+          if (pointIdx >= CALIB_GRID.length) {
+            tryFitCalib();
+          } else {
+            const [nx, ny] = CALIB_GRID[pointIdx];
+            showDot(nx, ny, `${pointIdx+1} / ${CALIB_GRID.length}`);
+          }
+        }
+      }
+    }
+
+    // ── Distance badge ──────────────────────────────────────────────────────
+    if (pd && pd.distCm != null) {
+      const nose = ts(faceLms[4]);
+      const dc   = pd.distCm;
+      ctx.fillStyle = dc < 25 ? '#FF4444' : dc < 40 ? '#FFD700' : '#00FF88';
+      ctx.font = 'bold 13px system-ui';
+      ctx.fillText(`~${dc.toFixed(0)} cm`, nose.x+10, nose.y-20);
+    }
+  } // end face block
+
+  // ── Hands ───────────────────────────────────────────────────────────────────
+  let handDir = '—', handLms0 = null;
+  for (let i = 0; i < hands.length; i++) {
+    const lms   = hands[i];
+    const label = hr.handedness?.[i]?.[0]?.categoryName || '';
+    const color = label === 'Left' ? '#00FF88' : '#FF8800';
+    drawHand(ctx, lms, ts, color);
+    if (i === 0) { handDir = smoothDirection(dirBuf, classifyDirection(lms)); handLms0 = lms; }
+  }
+
+  // ── Eye cover (check all hands, track which hand covers which eye) ──────────
+  // cover.left/right = null (none) | 'Left Hand' | 'Right Hand'
+  const cover = { left: null, right: null };
+  for (let i = 0; i < hands.length; i++) {
+    const hLms      = hands[i];
+    const handLabel = hr.handedness?.[i]?.[0]?.categoryName || 'Hand';
+    const handName  = handLabel + ' Hand';
+    const c = detectHandOverEye(hLms, faceLms, vw, vh);
+    if (c.left  && !cover.left)  cover.left  = handName;
+    if (c.right && !cover.right) cover.right = handName;
+  }
+  if (handLms0) drawDirectionLabel(ctx, handLms0, ts, handDir);
+
+  // ── Draw eye-cover indicators on canvas ──────────────────────────────────────
+  if (faceLms && (cover.left || cover.right)) {
+    ctx.font = 'bold 13px system-ui';
+    ctx.textAlign = 'center';
+
+    if (cover.right) {
+      const re = { x: (1 - faceLms[468].x) * cw, y: faceLms[468].y * ch };
+      ctx.fillStyle = 'rgba(255,60,60,0.60)';
+      ctx.beginPath(); ctx.arc(re.x, re.y, 38, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#fff';
+      ctx.fillText('COVERED', re.x, re.y - 4);
+      ctx.fillText(cover.right, re.x, re.y + 13);
+    }
+
+    if (cover.left) {
+      const le = { x: (1 - faceLms[473].x) * cw, y: faceLms[473].y * ch };
+      ctx.fillStyle = 'rgba(255,60,60,0.60)';
+      ctx.beginPath(); ctx.arc(le.x, le.y, 38, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#fff';
+      ctx.fillText('COVERED', le.x, le.y - 4);
+      ctx.fillText(cover.left, le.x, le.y + 13);
+    }
+
+    ctx.textAlign = 'left';
+  }
+
+  // ── FPS ─────────────────────────────────────────────────────────────────────
+  frameCount++;
+  const now = performance.now();
+  if (now - lastFpsTime >= 1000) { fps = frameCount; frameCount = 0; lastFpsTime = now; }
+
+  // ── Debug text panel ─────────────────────────────────────────────────────────
+  setD('d-hand',  hands.length > 0 ? 'YES' : 'NO', hands.length > 0 ? 'yes' : 'no');
+  setD('d-face',  faceLms ? 'YES' : 'NO', faceLms ? 'yes' : 'no');
+  D('d-dir').textContent  = handDir;
+  D('d-fps').textContent  = `${fps} fps`;
+  setD('d-cov-r', cover.right ? cover.right : 'clear', cover.right ? 'no' : 'yes');
+  setD('d-cov-l', cover.left  ? cover.left  : 'clear', cover.left  ? 'no' : 'yes');
+  setD('d-zoom',  zoomEnabled ? 'ON' : 'OFF', zoomEnabled ? 'yes' : 'no');
+
+  if (faceLms) {
+    const re = computeEAR(faceLms, R_EAR_IDX), le = computeEAR(faceLms, L_EAR_IDX);
+    D('d-ear-r').textContent = `${re > 0.2 ? 'open' : 'closed'} (${re.toFixed(2)})`;
+    D('d-ear-l').textContent = `${le > 0.2 ? 'open' : 'closed'} (${le.toFixed(2)})`;
+    if (pd) {
+      D('d-pd-px').textContent = `${Math.round(pd.pdPx)} px`;
+      D('d-pd-mm').textContent = pd.pdMm ? `~${pd.pdMm.toFixed(1)} mm` : '—';
+      if (pd.distCm != null)
+        setD('d-dist', `~${pd.distCm.toFixed(0)} cm`,
+             pd.distCm < 25 ? 'no' : pd.distCm < 40 ? 'warn' : 'yes');
+    }
+    if (rawYawDeg != null) {
+      D('d-yaw').textContent   = `${rawYawDeg.toFixed(1)}°`;
+      D('d-pitch').textContent = `${rawPitchDeg.toFixed(1)}°`;
+    }
+    if (screenX != null) {
+      D('d-sx').textContent = screenX;
+      D('d-sy').textContent = screenY;
+    }
+  }
+  if (!leftSphere) {
+    setD('d-sphere', 'unlocked — press C', 'warn');
+  }
+
+  // ── 3-D debug view ───────────────────────────────────────────────────────────
+  if (show3d && debug3dView) {
+    debug3dView.render({
+      headCenter:     lastHeadCenter,
+      sphereL:        lastSphereWL,
+      sphereR:        lastSphereWR,
+      irisL:          lastIris3dL,
+      irisR:          lastIris3dR,
+      lockedL:        !!leftSphere,
+      lockedR:        !!rightSphere,
+      landmarks:      landmarks3d,
+      combinedDir:    lastCombinedDir,
+      gazeLen:        3000,
+      monitorCorners: monitorPlane?.corners,
+      monitorCenter:  monitorPlane?.center,
+      monitorNormal:  monitorPlane?.normal,
+      gazeMarkers,
+    });
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Button handlers
+// ─────────────────────────────────────────────────────────────────────────────
+btnStart.onclick = async () => {
+  btnStart.disabled = true;
+  try {
+    setStatus('Starting camera…');
+    stream = await navigator.mediaDevices.getUserMedia({
+      video: { width:{ideal:1280}, height:{ideal:720}, frameRate:{ideal:30}, facingMode:'user' },
+      audio: false,
+    });
+    video.srcObject = stream;
+    await new Promise((res, rej) => { video.onloadedmetadata = res; video.onerror = rej; });
+    await video.play();
+    running = true; frameCount = 0; lastFpsTime = performance.now(); fps = 0;
+    gazeDeque.reset(); dirBuf.length = 0; smoothCrop = null;
+    _irisRX = 0.5; _irisRY = 0.5;
+    Rref = null; leftSphere = null; rightSphere = null; monitorPlane = null;
+    lastCombinedDir = null; gazeMarkers = [];
+    btnStop.disabled = false; btnZoom.disabled = false; btnLock.disabled = false;
+    setStatus('Running — press C to lock eye spheres, then calibrate.');
+    requestAnimationFrame(renderFrame);
+    wsEnabled = true;
+    connectWS();
+  } catch (e) {
+    btnStart.disabled = false;
+    setStatus(`Camera error: ${e.message}`, true);
+  }
+};
+
+btnStop.onclick = () => {
+  running = false;
+  if (animId) cancelAnimationFrame(animId);
+  if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; }
+  video.srcObject = null;
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  hideCalib(); hideGazeDot();
+  D('gaze-direction-label').style.display = 'none';
+  calibState = 'IDLE'; calibrated = false; calibCoeffsX = null; calibCoeffsY = null;
+  leftSphere = null; rightSphere = null; monitorPlane = null;
+  btnStart.disabled = false; btnStop.disabled = true;
+  btnZoom.disabled = true; btnLock.disabled = true; btnCalib.disabled = true;
+  btnZoom.textContent = 'Focus Face';
+  btnCalib.textContent = 'Calibrate Gaze';
+  disconnectWS();
+  setStatus('Camera stopped.');
+  setD('d-calib', '—'); setD('d-sphere', '—');
+};
+
+btnZoom.onclick = () => {
+  zoomEnabled = !zoomEnabled;
+  if (!zoomEnabled) smoothCrop = null;
+  btnZoom.textContent = zoomEnabled ? 'Exit Zoom' : 'Focus Face';
+  setD('d-zoom', zoomEnabled ? 'ON' : 'OFF', zoomEnabled ? 'yes' : 'no');
+};
+
+btnLock.onclick = () => { if (running) lockEyes(); };
+
+btnCalib.onclick = () => {
+  if (!running) return;
+  if (!leftSphere || !rightSphere) {
+    setStatus('Lock eyes first (press C or click "Lock Eyes"), then calibrate.', true);
+    return;
+  }
+  calibState = 'LOCK';
+  calibFrames = 0;
+  calibrated = false; calibCoeffsX = null; calibCoeffsY = null;
+  // Skip the separate lock phase — spheres already locked — go straight to INTRO
+  calibState = 'INTRO';
+  hideGazeDot();
+  showCalibIntro();
+};
+
+btnDebug3d.onclick = () => {
+  show3d = !show3d;
+  debug3dSec.style.display = show3d ? 'block' : 'none';
+  if (show3d) {
+    // Size the canvas to fill the section
+    debug3dCvs.width  = debug3dSec.clientWidth;
+    debug3dCvs.height = debug3dSec.clientHeight;
+    if (!debug3dView) debug3dView = new Debug3D(debug3dCvs);
+  }
+  btnDebug3d.textContent = show3d ? 'Hide 3D Debug' : '3D Debug';
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Model loading
+// ─────────────────────────────────────────────────────────────────────────────
+async function loadModels() {
+  try {
+    loadMsg.textContent = 'Loading MediaPipe JS…';
+    const { HandLandmarker, FaceLandmarker, FilesetResolver } =
+      await new Function('return import("/mediapipe-vision.js")')();
+
+    loadMsg.textContent = 'Initializing WASM runtime…';
+    const vision = await FilesetResolver.forVisionTasks(WASM_PATH);
+
+    loadMsg.textContent = 'Loading Hand model…';
+    handLandmarker = await HandLandmarker.createFromOptions(vision, {
+      baseOptions: { modelAssetPath: HAND_MODEL, delegate: 'GPU' },
+      runningMode: 'VIDEO', numHands: 2,
+    });
+
+    loadMsg.textContent = 'Loading Face model…';
+    faceLandmarker = await FaceLandmarker.createFromOptions(vision, {
+      baseOptions: { modelAssetPath: FACE_MODEL, delegate: 'GPU' },
+      runningMode: 'VIDEO', numFaces: 1,
+      outputFaceBlendshapes: false, outputFacialTransformationMatrixes: false,
+    });
+
+    loadingEl.style.display = 'none';
+    btnStart.disabled = false;
+    setStatus('Models ready — click Start Camera.');
+  } catch (e) {
+    loadMsg.textContent = `Failed: ${e.message}`;
+    loadMsg.style.color = '#FF6666';
+    setStatus(`Load error: ${e.message}`, true);
+    console.error('[ExamApp]', e);
+  }
+}
+
+loadModels();
+</script>
+</body>
+</html>

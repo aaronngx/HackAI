@@ -19,38 +19,16 @@ interface DetectionReport {
   recommendation: string;
 }
 
-// ── Mock fallback ─────────────────────────────────────────────────────────────
-
-const MOCK_NORMAL_INPUT: DetectionInput = {
-  result: "normal",
-  imageDate: new Date().toISOString(),
-};
-
-const MOCK_CONDITION_INPUT: DetectionInput = {
-  result: "condition_detected",
-  conditionName: "Conjunctivitis",
-  confidence: 78,
-  icd10: "H10.9",
-  affectedEye: "right",
-  imageDate: new Date().toISOString(),
-};
-
-// Toggle this to preview each state during development
-const MOCK_INPUT: DetectionInput = MOCK_CONDITION_INPUT;
-
-const MOCK_REPORT_NORMAL: DetectionReport = {
-  summary:
-    "Based on this image analysis, no visible signs of common external eye conditions were detected. The eye appears normal under the screening model.",
-  recommendation:
-    "No immediate action is suggested based on this screening. Regular eye check-ups are still recommended, as this tool does not replace a professional examination.",
-};
-
-const MOCK_REPORT_CONDITION: DetectionReport = {
-  summary:
-    "The screening model identified patterns potentially consistent with Conjunctivitis in the right eye, with an estimated confidence of 78%. This is an automated estimation only and has not been verified by a medical professional.",
-  recommendation:
-    "We suggest consulting an eye care professional for proper evaluation. Do not self-medicate based on this result.",
-};
+interface EyeDiagnosticHistoryItem {
+  id: string;
+  userId: string;
+  likely_disease: string;
+  confidence: string;
+  visible_findings: string[];
+  short_report?: string | null;
+  medical_disclaimer?: string | null;
+  createdAt: string;
+}
 
 // ── Colours ───────────────────────────────────────────────────────────────────
 
@@ -64,12 +42,93 @@ const C = {
   brand: "#00c4d4",
 };
 
+function toConfidencePercent(value: unknown): number | undefined {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return Math.max(0, Math.min(100, value));
+  }
+
+  if (typeof value !== "string") return undefined;
+  const trimmed = value.trim();
+  if (!trimmed) return undefined;
+
+  const numeric = Number.parseFloat(trimmed);
+  if (Number.isFinite(numeric)) {
+    return Math.max(0, Math.min(100, numeric));
+  }
+
+  const lower = trimmed.toLowerCase();
+  if (lower === "low") return 35;
+  if (lower === "medium") return 65;
+  if (lower === "high") return 90;
+  return undefined;
+}
+
+function buildFallbackReport(input: DetectionInput): DetectionReport {
+  if (input.result === "normal") {
+    return {
+      summary:
+        "No visible signs of common external eye conditions were detected in this image-based screening.",
+      recommendation:
+        "No immediate action is suggested from this screening alone. Keep regular eye check-ups as routine care.",
+    };
+  }
+
+  const condition = input.conditionName || "an external eye condition";
+  const eyeText = input.affectedEye ? ` in the ${input.affectedEye} eye` : "";
+  const confidenceText =
+    input.confidence != null
+      ? ` with an estimated confidence of ${input.confidence}%`
+      : "";
+
+  return {
+    summary: `The screening model identified patterns potentially consistent with ${condition}${eyeText}${confidenceText}. This is an automated estimation only and has not been verified by a medical professional.`,
+    recommendation:
+      "Please consult a licensed eye care professional for proper evaluation. Do not self-medicate based on this result.",
+  };
+}
+
+function mapHistoryToInput(item: EyeDiagnosticHistoryItem): DetectionInput {
+  const conditionName = String(item.likely_disease || "").trim();
+  const normalizedCondition = conditionName.toLowerCase();
+  const isNormal = normalizedCondition === "normal" || normalizedCondition === "n/a";
+
+  return {
+    result: isNormal ? "normal" : "condition_detected",
+    conditionName: isNormal ? undefined : conditionName,
+    confidence: toConfidencePercent(item.confidence),
+    affectedEye: "both",
+    imageDate: item.createdAt,
+  };
+}
+
 // ── Gemini report generator ───────────────────────────────────────────────────
 
-async function generateDetectionReport(input: DetectionInput): Promise<DetectionReport> {
+async function generateDetectionReport(
+  input: DetectionInput,
+  history: EyeDiagnosticHistoryItem[] = []
+): Promise<DetectionReport> {
   const systemPrompt = `You are an ophthalmology AI assistant. You summarise eye disease detection results from image analysis. You do not diagnose — you provide estimations only. Return ONLY valid JSON, no markdown or code fences.`;
+  const historyContext = history.length
+    ? `Personalization context from this logged-in user's previous eye-diagnostic records (most recent first):
+${JSON.stringify(
+  history.slice(0, 5).map((item) => ({
+    date: item.createdAt,
+    likely_disease: item.likely_disease,
+    confidence: item.confidence,
+    visible_findings: item.visible_findings,
+    short_report: item.short_report,
+  })),
+  null,
+  2
+)}
+
+Use this history to personalize tone and recommendation carefully, but do not overstate certainty.`
+    : `No previous eye-diagnostic history is available for this user.`;
+
   const prompt = `Summarise this external eye disease screening result:
 ${JSON.stringify(input, null, 2)}
+
+${historyContext}
 
 The detection model analysed an image of the eye and returned either "normal" or a specific condition name with confidence. Write a plain-language summary and a recommendation. Phrase everything as estimations, not diagnoses.
 
@@ -90,8 +149,23 @@ Return this exact JSON:
     const cleaned = data.text.replace(/```json|```/g, "").trim();
     return JSON.parse(cleaned) as DetectionReport;
   } catch (e) {
-    console.warn("Gemini failed, using mock report:", e);
-    return input.result === "normal" ? MOCK_REPORT_NORMAL : MOCK_REPORT_CONDITION;
+    console.warn("Gemini failed, using rule-based fallback report:", e);
+    return buildFallbackReport(input);
+  }
+}
+
+async function fetchEyeDiagnosticHistory(token: string): Promise<EyeDiagnosticHistoryItem[]> {
+  try {
+    const res = await fetch(`/api/eye-diagnostic/history?t=${Date.now()}`, {
+      method: "GET",
+      headers: { Authorization: `Bearer ${token}` },
+      cache: "no-store",
+    });
+    if (!res.ok) return [];
+    const data = await res.json();
+    return Array.isArray(data.history) ? data.history : [];
+  } catch {
+    return [];
   }
 }
 
@@ -305,6 +379,8 @@ export default function DiseaseReportPage() {
   const router = useRouter();
   const [input, setInput] = useState<DetectionInput | null>(null);
   const [report, setReport] = useState<DetectionReport | null>(null);
+  const [diagnosticHistory, setDiagnosticHistory] = useState<EyeDiagnosticHistoryItem[]>([]);
+  const [inputError, setInputError] = useState<string>("");
   const [pageLoading, setPageLoading] = useState(true);
   const [narrationLines, setNarrationLines] = useState<string[]>([]);
   const [showNarrationPrompt, setShowNarrationPrompt] = useState(false);
@@ -343,7 +419,7 @@ export default function DiseaseReportPage() {
     }
     generateDetectionReport(input).then(r => {
       setReport(r);
-      setNarrationLines(buildNarrationScript(input, r));
+      setNarrationLines(buildNarrationScript(resolvedInput, r));
       setPageLoading(false);
       setShowNarrationPrompt(true);
       try { localStorage.setItem("irisDetectionReport", JSON.stringify(r)); } catch {}
@@ -371,7 +447,38 @@ export default function DiseaseReportPage() {
     </div>
   );
 
-  if (!report || !input) return null;
+  if (!report || !input) {
+    return (
+      <div
+        style={{
+          minHeight: "100vh",
+          background: "#f0f5fb",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          padding: 24,
+        }}
+      >
+        <div
+          style={{
+            maxWidth: 520,
+            background: "#fff",
+            border: "1px solid #ccd8ee",
+            borderRadius: 14,
+            padding: 20,
+            color: "#0d1b2e",
+          }}
+        >
+          <div style={{ fontFamily: "'Instrument Serif'", fontSize: 24, marginBottom: 8 }}>
+            Report unavailable
+          </div>
+          <p style={{ fontSize: 14, lineHeight: 1.7, color: "#4a6280", margin: 0 }}>
+            {inputError || "No diagnostic data available for this report."}
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <>
@@ -458,6 +565,27 @@ export default function DiseaseReportPage() {
         {/* ── Header ── */}
         <div className="fade-up report-header" style={{ background: "#0d1526", borderBottom: "1px solid #1e2d45", position: "relative", overflow: "hidden" }}>
           <div style={{ position: "absolute", right: 40, top: -10, fontFamily: "'Bebas Neue'", fontSize: 200, color: "rgba(255,255,255,0.03)", lineHeight: 1, userSelect: "none" }}>IRIS</div>
+          <button
+            onClick={handleBack}
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 8,
+              marginBottom: 14,
+              background: "rgba(255,255,255,0.1)",
+              border: "1px solid rgba(255,255,255,0.2)",
+              borderRadius: 10,
+              color: "#fff",
+              fontFamily: "'DM Mono', monospace",
+              fontSize: 12,
+              padding: "8px 12px",
+              cursor: "pointer",
+              position: "relative",
+              zIndex: 1,
+            }}
+          >
+            ← Back
+          </button>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 16 }}>
             <div>
               <button onClick={handleBack} style={{
@@ -487,6 +615,11 @@ export default function DiseaseReportPage() {
                   ? new Date(input.imageDate).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })
                   : new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })}
               </div>
+              {diagnosticHistory.length > 0 && (
+                <div style={{ fontFamily: "'DM Mono'", fontSize: 10, color: "rgba(255,255,255,0.5)", marginTop: 4 }}>
+                  Personalized with {diagnosticHistory.length} previous diagnostic record{diagnosticHistory.length > 1 ? "s" : ""}
+                </div>
+              )}
             </div>
             {/* Result badge in header */}
             <div style={{
@@ -561,8 +694,8 @@ export default function DiseaseReportPage() {
               <button
                 onClick={() => {
                   if (playing) { stop(); }
-                  else if (hasStarted.current) { replay(narrationLines); }
-                  else { hasStarted.current = true; start(narrationLines); }
+                  else if (hasStarted) { replay(narrationLines); }
+                  else { setHasStarted(true); start(narrationLines); }
                 }}
                 style={{
                   marginLeft: "auto", background: "#0d1526", border: "none", borderRadius: 8,
@@ -570,7 +703,7 @@ export default function DiseaseReportPage() {
                   fontFamily: "'DM Mono'", fontSize: 13, color: "#fff",
                 }}
               >
-                {playing ? "⏹ Stop" : hasStarted.current ? "▶ Re-read" : "▶ Play"}
+                {playing ? "⏹ Stop" : hasStarted ? "▶ Re-read" : "▶ Play"}
               </button>
             </div>
             <p style={{ fontFamily: "'Instrument Serif'", fontSize: 17, color: "#0d1b2e", lineHeight: 1.7 }}>
