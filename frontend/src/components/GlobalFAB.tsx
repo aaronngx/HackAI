@@ -6,7 +6,7 @@ export default function GlobalFAB() {
   const router = useRouter();
 
   return (
-    <div style={{ position: "fixed", right: 32, bottom: 80, width: 60, height: 60, zIndex: 1000 }}>
+    <div style={{ position: "fixed", right: 48, bottom: 110, width: 60, height: 60, zIndex: 1000 }}>
       <SocialMenu
         mainButtonColor="#ffffff"
         iconColor="#000000"

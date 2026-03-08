@@ -186,20 +186,20 @@ function buildNarrationScript(report: ExamReport, input: ExamInput): string[] {
     : "Both eyes appear to be within the 20/20 normal range based on this screening.";
 
   const conditionExplanations: Record<string, string> = {
-    myopia: "Myopia, also called nearsightedness, means you can see things up close clearly but distant objects appear blurry. It happens when the eyeball is slightly too long, causing light to focus in front of the retina instead of on it.",
-    hyperopia: "Hyperopia, also called farsightedness, means distant objects may be clearer than nearby ones. It happens when the eyeball is slightly shorter than normal, so light focuses behind the retina.",
-    astigmatism: "Astigmatism means the cornea — the clear front surface of the eye — is slightly irregular in shape, like a football rather than a basketball. This can cause blurry or distorted vision at any distance.",
-    presbyopia: "Presbyopia is an age-related change where the eye's lens gradually loses flexibility, making it harder to focus on close objects. It typically becomes noticeable after age 40.",
+    myopia: "Myopia, or nearsightedness, means distant objects appear blurry because the eyeball is slightly too long.",
+    hyperopia: "Hyperopia, or farsightedness, means nearby objects may appear blurry because the eyeball is slightly shorter than normal.",
+    astigmatism: "Astigmatism means the cornea is slightly irregular in shape, causing blurry or distorted vision at any distance.",
+    presbyopia: "Presbyopia is an age-related change where the lens loses flexibility, making it harder to focus on close objects.",
   };
 
-  const diagnosisLines = report.diagnoses.slice(0, 2).map((d, i) => {
+  const diagnosisLines = report.diagnoses.slice(0, 2).flatMap((d, i) => {
     const key = d.condition.toLowerCase().replace(/[^a-z]/g, "");
     const matchedKey = Object.keys(conditionExplanations).find(k => key.includes(k));
     const explanation = matchedKey ? conditionExplanations[matchedKey] : "";
     const prefix = i === 0
-      ? `The screening suggests a possible pattern consistent with ${d.condition}${d.estimatedRx ? `, with a rough estimate of ${d.estimatedRx}` : ""}. Estimated confidence is ${d.confidence} percent.`
-      : `A secondary finding suggests possible ${d.condition}, at ${d.confidence} percent estimated confidence.`;
-    return explanation ? `${prefix} To explain what that means — ${explanation}` : prefix;
+      ? `The screening suggests a possible pattern consistent with ${d.condition}${d.estimatedRx ? `, with a rough estimate of ${d.estimatedRx}` : ""}. Confidence estimate: ${d.confidence} percent.`
+      : `A secondary finding suggests possible ${d.condition}, at ${d.confidence} percent confidence.`;
+    return explanation ? [prefix, explanation] : [prefix];
   });
 
   const refractiveNote = [
@@ -209,13 +209,14 @@ function buildNarrationScript(report: ExamReport, input: ExamInput): string[] {
   ].filter(Boolean).join(" ");
 
   return [
-    `Hi, I'm Iris. I've finished reviewing your eye screening data. Let me walk you through what was found.`,
+    `Hi, I'm Iris. Here's a summary of your eye screening.`,
     acuityNote,
-    refractiveNote ? `Here are the refractive estimates from the screening. ${refractiveNote} These are approximations only and not clinical prescriptions.` : "",
+    refractiveNote ? `Refractive estimates: ${refractiveNote} These are approximations, not clinical prescriptions.` : "",
     ...diagnosisLines,
-    diagnosisLines.length === 0 ? "No significant refractive patterns were detected in this screening." : "",
+    diagnosisLines.length === 0 ? "No significant refractive patterns were detected." : "",
     report.summary,
-    `${report.urgencyReason} This screening is not a substitute for a professional eye exam. Please consult a licensed eye care professional for a full evaluation.`,
+    report.urgencyReason,
+    `Please consult a licensed eye care professional for a full evaluation.`,
   ].filter(Boolean);
 }
 
@@ -339,7 +340,32 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
 function NarrationBar({ lines, lineIdx, playing, loading, onStop }: {
   lines: string[]; lineIdx: number; playing: boolean; loading: boolean; onStop: () => void;
 }) {
-  if (!playing && lineIdx === -1) return null;
+  const isActive = playing || lineIdx !== -1;
+  type AnimState = "hidden" | "entering" | "visible" | "leaving";
+  const [animState, setAnimState] = useState<AnimState>("hidden");
+
+  useEffect(() => {
+    if (isActive) {
+      if (animState === "hidden" || animState === "leaving") {
+        setAnimState("entering");
+        const t = setTimeout(() => setAnimState("visible"), 400);
+        return () => clearTimeout(t);
+      }
+    } else {
+      if (animState === "entering" || animState === "visible") {
+        setAnimState("leaving");
+        const t = setTimeout(() => setAnimState("hidden"), 400);
+        return () => clearTimeout(t);
+      }
+    }
+  }, [isActive]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  if (animState === "hidden") return null;
+
+  const animation =
+    animState === "entering" ? "narBarUp 0.38s cubic-bezier(0.2,0,0,1) forwards" :
+    animState === "leaving"  ? "narBarDown 0.38s cubic-bezier(0.4,0,0.6,1) forwards" :
+    "none";
 
   return (
     <div className="narration-bar" style={{
@@ -348,6 +374,7 @@ function NarrationBar({ lines, lineIdx, playing, loading, onStop }: {
       background: "#ffffff",
       borderTop: `2px solid ${C.brand}`,
       boxShadow: "0 -4px 20px rgba(13,27,46,0.08)",
+      animation,
     }}>
       <div style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
         {/* Voice wave animation */}
@@ -404,8 +431,15 @@ export default function ReportPage() {
   const [narrationLines, setNarrationLines] = useState<string[]>([]);
   const [showNarrationPrompt, setShowNarrationPrompt] = useState(false);
   const [daysSinceLastScan, setDaysSinceLastScan] = useState<number | null>(null);
+  const [pageExiting, setPageExiting] = useState(false);
   const { lineIdx, playing, loading: ttsLoading, start, stop, replay } = useElevenLabsNarration();
   const hasStarted = useRef(false);
+
+  const handleBack = () => {
+    stop();
+    setPageExiting(true);
+    setTimeout(() => router.push("/"), 380);
+  };
 
   // 1. Load exam input from localStorage
   useEffect(() => {
@@ -456,6 +490,8 @@ export default function ReportPage() {
         @keyframes spin { to { transform: rotate(360deg); } }
         @keyframes voicePulse { from { height: 4px; } to { height: 20px; } }
         @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes narBarUp { from { transform: translateY(100%); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+        @keyframes narBarDown { from { transform: translateY(0); opacity: 1; } to { transform: translateY(100%); opacity: 0; } }
       `}</style>
       <Starsfield
         starCount={150}
@@ -509,10 +545,12 @@ export default function ReportPage() {
         @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Mono:wght@400;500&family=Instrument+Serif:ital@0;1&family=DM+Sans:wght@300;400;500;600&display=swap');
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body { background: #f0f5fb; font-family: 'DM Sans', sans-serif; }
-        @keyframes fadeUp { from { opacity:0; transform:translateY(14px); } to { opacity:1; transform:translateY(0); } }
+        @keyframes fadeUp   { from { opacity:0; transform:translateY(14px); } to { opacity:1; transform:translateY(0); } }
+        @keyframes fadeDown { from { opacity:1; transform:translateY(0); }   to { opacity:0; transform:translateY(14px); } }
         @keyframes voicePulse { from { height: 4px; } to { height: 20px; } }
         @keyframes promptFadeIn { from { opacity:0; transform:scale(0.96); } to { opacity:1; transform:scale(1); } }
-        .fade-up { animation: fadeUp 0.5s ease both; }
+        .fade-up   { animation: fadeUp  0.5s ease both; }
+        .page-exit { animation: fadeDown 0.36s ease forwards; }
 
         /* ── Responsive layout ── */
         .report-header { padding: 28px 60px; }
@@ -545,7 +583,7 @@ export default function ReportPage() {
         }
       `}</style>
 
-      <div style={{ background: "#f0f5fb", minHeight: "100vh", color: "#0d1b2e", paddingBottom: (playing || ttsLoading) ? 90 : 0 }}>
+      <div className={pageExiting ? "page-exit" : ""} style={{ background: "#f0f5fb", minHeight: "100vh", color: "#0d1b2e", paddingBottom: (playing || ttsLoading) ? 90 : 0 }}>
 
         {/* ── Narration prompt modal ── */}
         {showNarrationPrompt && (
@@ -610,6 +648,20 @@ export default function ReportPage() {
           <div style={{ position: "absolute", right: 40, top: -10, fontFamily: "'Bebas Neue'", fontSize: 200, color: "rgba(255,255,255,0.04)", lineHeight: 1, userSelect: "none" }}>IRIS</div>
           <div className="report-header-inner">
             <div>
+              <button onClick={handleBack} style={{
+                display: "inline-flex", alignItems: "center", gap: 6,
+                background: "none", border: "none", cursor: "pointer",
+                color: "rgba(255,255,255,0.45)", fontFamily: "'DM Mono'", fontSize: 11, letterSpacing: 1,
+                padding: "0 0 12px 0", transition: "color 0.18s",
+              }}
+                onMouseEnter={e => (e.currentTarget.style.color = "rgba(255,255,255,0.85)")}
+                onMouseLeave={e => (e.currentTarget.style.color = "rgba(255,255,255,0.45)")}
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="15 18 9 12 15 6"/>
+                </svg>
+                HOME
+              </button>
               <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={C.brand} strokeWidth="1.5">
                   <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" />

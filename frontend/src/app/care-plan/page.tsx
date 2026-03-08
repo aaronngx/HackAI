@@ -184,59 +184,92 @@ function buildPlan(input: ExamInput, report: ExamReport): EyeCarePlan {
 // ── ElevenLabs narration hook ─────────────────────────────────────────────────
 
 function useNarration() {
-  const [lineIdx, setLineIdx]   = useState(-1);
-  const [playing, setPlaying]   = useState(false);
-  const [loading, setLoading]   = useState(false);
+  const [playing, setPlaying] = useState(false);
+  const [loading, setLoading] = useState(false);
   const audioRef   = useRef<HTMLAudioElement | null>(null);
-  const linesRef   = useRef<string[]>([]);
-  const stoppedRef = useRef(false);
+  const sessionRef = useRef(0); // incremented on every start/stop to kill stale fetches
 
-  const speakLine = async (idx: number) => {
-    if (stoppedRef.current) return;
-    if (idx >= linesRef.current.length) { setPlaying(false); setLineIdx(-1); return; }
-    setLineIdx(idx);
-    setLoading(true);
-    try {
-      const res = await fetch("/api/tts", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: linesRef.current[idx] }),
-      });
-      if (!res.ok) throw new Error("TTS failed");
-      const blob = await res.blob();
-      const url  = URL.createObjectURL(blob);
-      if (audioRef.current) { audioRef.current.pause(); URL.revokeObjectURL(audioRef.current.src); }
-      const audio = new Audio(url);
-      audioRef.current = audio;
-      setLoading(false);
-      audio.onended = () => { if (!stoppedRef.current) speakLine(idx + 1); };
-      audio.onerror = () => { setLoading(false); if (!stoppedRef.current) speakLine(idx + 1); };
-      await audio.play();
-    } catch {
-      setLoading(false);
-      if (!stoppedRef.current) speakLine(idx + 1);
+  const stopAudio = () => {
+    if (audioRef.current) {
+      audioRef.current.pause();
+      try { URL.revokeObjectURL(audioRef.current.src); } catch { /* ignore */ }
+      audioRef.current = null;
     }
   };
 
-  const start = (lines: string[]) => {
-    linesRef.current = lines;
-    stoppedRef.current = false;
+  // Speaks `text`. If loop=true (default), repeats after a 1.2 s pause until stop().
+  // If loop=false, plays once and stops automatically.
+  const start = (text: string, loop = true) => {
+    sessionRef.current += 1;
+    const session = sessionRef.current;
+    stopAudio();
     setPlaying(true);
-    speakLine(0);
+    setLoading(false);
+
+    const speak = async () => {
+      if (session !== sessionRef.current) return;
+      setLoading(true);
+      try {
+        const res = await fetch("/api/tts", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text }),
+        });
+        if (session !== sessionRef.current) return;
+        if (!res.ok) throw new Error("TTS failed");
+        const blob = await res.blob();
+        if (session !== sessionRef.current) return;
+        const url = URL.createObjectURL(blob);
+        stopAudio();
+        if (session !== sessionRef.current) { URL.revokeObjectURL(url); return; }
+        const audio = new Audio(url);
+        audioRef.current = audio;
+        setLoading(false);
+        audio.onended = () => {
+          if (session !== sessionRef.current) return;
+          if (loop) {
+            setTimeout(() => { if (session === sessionRef.current) speak(); }, 1200);
+          } else {
+            setPlaying(false);
+          }
+        };
+        audio.onerror = () => {
+          setLoading(false);
+          if (session !== sessionRef.current) return;
+          if (loop) {
+            setTimeout(() => { if (session === sessionRef.current) speak(); }, 1200);
+          } else {
+            setPlaying(false);
+          }
+        };
+        await audio.play();
+      } catch {
+        setLoading(false);
+        if (session !== sessionRef.current) return;
+        if (loop) {
+          setTimeout(() => { if (session === sessionRef.current) speak(); }, 1200);
+        } else {
+          setPlaying(false);
+        }
+      }
+    };
+
+    speak();
   };
 
   const stop = () => {
-    stoppedRef.current = true;
-    if (audioRef.current) { audioRef.current.pause(); URL.revokeObjectURL(audioRef.current.src); audioRef.current = null; }
-    setPlaying(false); setLoading(false); setLineIdx(-1);
+    sessionRef.current += 1;
+    stopAudio();
+    setPlaying(false);
+    setLoading(false);
   };
 
   useEffect(() => () => {
-    stoppedRef.current = true;
-    if (audioRef.current) { audioRef.current.pause(); URL.revokeObjectURL(audioRef.current.src); audioRef.current = null; }
+    sessionRef.current += 1;
+    stopAudio();
   }, []);
 
-  return { lineIdx, playing, loading, start, stop };
+  return { playing, loading, start, stop };
 }
 
 // ── Exercise Modal ────────────────────────────────────────────────────────────
@@ -248,75 +281,91 @@ function formatTime(s: number) {
 }
 
 function ExerciseModal({ ex, onClose }: { ex: Exercise; onClose: () => void }) {
-  const { lineIdx, playing, loading, start, stop } = useNarration();
+  const { playing, loading, start, stop } = useNarration();
 
   const [phase, setPhase]           = useState<"idle" | "running" | "paused" | "done">("idle");
   const [elapsed, setElapsed]       = useState(0);
   const [activeStep, setActiveStep] = useState(-1);
-  const timerRef       = useRef<ReturnType<typeof setInterval> | null>(null);
-  const activeStepRef  = useRef(-1);
-  const phaseRef       = useRef<"idle" | "running" | "paused" | "done">("idle");
-  const suppressLoop   = useRef(false); // true when we stop() deliberately (step change/pause)
+  const timerRef      = useRef<ReturnType<typeof setInterval> | null>(null);
+  const elapsedRef    = useRef(0);
+  const activeStepRef = useRef(-1);
+  const phaseRef      = useRef<"idle" | "running" | "paused" | "done">("idle");
 
-  const total     = ex.durationSeconds;
+  const total   = ex.durationSeconds;
+  const stepDur = total / ex.steps.length;
   const remaining = Math.max(0, total - elapsed);
   const progress  = elapsed / total;
-  const stepDur   = total / ex.steps.length;
 
   const R             = 54;
   const CX            = 64;
   const circumference = 2 * Math.PI * R;
   const ringOffset    = circumference * (1 - progress);
 
-  useEffect(() => { activeStepRef.current = activeStep; }, [activeStep]);
   useEffect(() => { phaseRef.current = phase; }, [phase]);
 
-  const speakCurrentStep = (stepIdx: number) => {
-    suppressLoop.current = false;
-    start([`Step ${stepIdx + 1}. ${ex.steps[stepIdx]}`]);
+  // Speak a step on loop — start() handles the repeat internally.
+  const speakStep = (stepIdx: number) => {
+    if (stepIdx < 0 || stepIdx >= ex.steps.length) return;
+    start(`Step ${stepIdx + 1}. ${ex.steps[stepIdx]}`);
   };
 
-  const stopAndSuppress = () => {
-    suppressLoop.current = true;
-    stop();
-  };
+  // Stable refs so the setInterval closure always calls the latest versions
+  // without needing to be recreated when phase changes.
+  const stopRef      = useRef(stop);
+  const startRef     = useRef(start);
+  const speakStepRef = useRef(speakStep);
+  useEffect(() => { stopRef.current = stop; });
+  useEffect(() => { startRef.current = start; });
+  useEffect(() => { speakStepRef.current = speakStep; });
 
-  // ── Start / resume ──
+  // ── Start ──
   const handleStart = () => {
-    setPhase("running");
-    setActiveStep(0);
+    elapsedRef.current = 0;
     activeStepRef.current = 0;
-    speakCurrentStep(0);
+    setElapsed(0);
+    setActiveStep(0);
+    setPhase("running");
+    speakStep(0);
+  };
+
+  // ── Resume (preserves current step) ──
+  const handleResume = () => {
+    setPhase("running");
+    speakStep(activeStepRef.current);
   };
 
   // ── Timer tick ──
   useEffect(() => {
     if (phase === "running") {
       timerRef.current = setInterval(() => {
-        setElapsed(prev => {
-          const next = prev + 1;
+        const next = elapsedRef.current + 1;
+        elapsedRef.current = next;
+        setElapsed(next);
 
-          if (next >= total) {
-            clearInterval(timerRef.current!);
-            setPhase("done");
-            setActiveStep(ex.steps.length);
-            stopAndSuppress();
-            setTimeout(() => start([`Well done! You've completed ${ex.title}. Give your eyes a moment to rest.`]), 400);
-            return total;
-          }
+        if (next >= total) {
+          clearInterval(timerRef.current!);
+          stopRef.current();
+          setPhase("done");
+          setActiveStep(ex.steps.length);
+          setTimeout(() => {
+            if (phaseRef.current === "done") {
+              startRef.current(`Well done! You've completed ${ex.title}. Give your eyes a moment to rest.`, false);
+            }
+          }, 400);
+          return;
+        }
 
-          const newStep = Math.min(Math.floor(next / stepDur), ex.steps.length - 1);
-          if (newStep > activeStepRef.current) {
-            activeStepRef.current = newStep;
-            setActiveStep(newStep);
-            stopAndSuppress();
-            setTimeout(() => {
-              if (phaseRef.current === "running") speakCurrentStep(newStep);
-            }, 300);
-          }
-
-          return next;
-        });
+        const newStep = Math.min(Math.floor(next / stepDur), ex.steps.length - 1);
+        if (newStep > activeStepRef.current) {
+          activeStepRef.current = newStep;
+          setActiveStep(newStep);
+          stopRef.current();
+          setTimeout(() => {
+            if (phaseRef.current === "running" && activeStepRef.current === newStep) {
+              speakStepRef.current(newStep);
+            }
+          }, 300);
+        }
       }, 1000);
     } else {
       if (timerRef.current) clearInterval(timerRef.current);
@@ -324,32 +373,23 @@ function ExerciseModal({ ex, onClose }: { ex: Exercise; onClose: () => void }) {
     return () => { if (timerRef.current) clearInterval(timerRef.current); };
   }, [phase]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── Loop: re-narrate the same step after audio ends naturally ──
-  useEffect(() => {
-    if (suppressLoop.current) return; // we stopped deliberately — don't re-queue
-    if (lineIdx === -1 && !playing && !loading && phaseRef.current === "running") {
-      const t = setTimeout(() => {
-        if (phaseRef.current === "running" && !suppressLoop.current) {
-          speakCurrentStep(activeStepRef.current);
-        }
-      }, 1200);
-      return () => clearTimeout(t);
-    }
-  }, [lineIdx, playing, loading]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  const handlePause = () => { setPhase("paused"); stopAndSuppress(); };
+  const handlePause = () => {
+    setPhase("paused");
+    stopRef.current();
+  };
 
   const handleReset = () => {
+    elapsedRef.current = 0;
+    activeStepRef.current = -1;
     setPhase("idle");
     setElapsed(0);
     setActiveStep(-1);
-    activeStepRef.current = -1;
-    stopAndSuppress();
+    stopRef.current();
   };
 
   useEffect(() => () => {
     if (timerRef.current) clearInterval(timerRef.current);
-    stopAndSuppress();
+    stopRef.current();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const isDone = phase === "done";
@@ -452,7 +492,7 @@ function ExerciseModal({ ex, onClose }: { ex: Exercise; onClose: () => void }) {
             )}
             {phase === "paused" && (
               <>
-                <button onClick={handleStart} style={{ background: `linear-gradient(135deg, ${C.brand}, #0090a0)`, border: "none", borderRadius: 10, padding: "10px 24px", cursor: "pointer", color: "#fff", fontFamily: "'DM Mono', monospace", fontSize: 12, letterSpacing: 1, display: "flex", alignItems: "center", gap: 8 }}>
+                <button onClick={handleResume} style={{ background: `linear-gradient(135deg, ${C.brand}, #0090a0)`, border: "none", borderRadius: 10, padding: "10px 24px", cursor: "pointer", color: "#fff", fontFamily: "'DM Mono', monospace", fontSize: 12, letterSpacing: 1, display: "flex", alignItems: "center", gap: 8 }}>
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
                   Resume
                 </button>
@@ -821,15 +861,15 @@ export default function CarePlanPage() {
                   </svg>
                   <div style={{ flex: 1 }}>
                     <span style={{ fontFamily: "'DM Sans'", fontSize: 13, color: C.ink, fontWeight: 500 }}>Located in Austin, Texas</span>
-                    <span style={{ fontFamily: "'DM Sans'", fontSize: 12, color: C.dim }}> · Serving patients across the greater Austin area</span>
+                    <span style={{ fontFamily: "'DM Sans'", fontSize: 12, color: C.dim }}> · Serving patients across Austin</span>
                   </div>
                   <a
-                    href="https://www.westlakeeyespecialists.com"
+                    href="https://westlakeeyes.com/eye-care-services/"
                     target="_blank"
                     rel="noopener noreferrer"
                     style={{ background: `linear-gradient(135deg, ${C.brand}, #0090a0)`, border: "none", borderRadius: 8, padding: "9px 18px", textDecoration: "none", fontFamily: "'Bebas Neue', sans-serif", fontSize: 14, letterSpacing: 2, color: "#fff", whiteSpace: "nowrap" }}
                   >
-                    Book Consultation
+                    Services
                   </a>
                 </div>
               </div>

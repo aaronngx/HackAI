@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useRef } from "react";
+import { useRouter } from "next/navigation";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -100,30 +101,30 @@ function buildNarrationScript(input: DetectionInput, report: DetectionReport): s
   const isNormal = input.result === "normal";
 
   const conditionExplanations: Record<string, string> = {
-    conjunctivitis: "Conjunctivitis, commonly known as pink eye, is an inflammation of the thin clear layer covering the white part of the eye. It can cause redness, itching, and discharge, and is often caused by infection or allergies.",
-    cataract: "A cataract is a clouding of the eye's natural lens, which sits behind the iris and pupil. It can cause blurry or dim vision and increased sensitivity to glare, and is very common with age.",
-    stye: "A stye is a small, painful lump that forms on the edge of the eyelid, usually caused by a bacterial infection of a gland near the eyelashes. It often looks like a pimple.",
-    pterygium: "A pterygium is a growth of tissue that starts on the white of the eye and can slowly spread onto the cornea. It is often linked to UV exposure and can cause redness or blurred vision if it grows large enough.",
-    glaucoma: "Glaucoma is a condition where the optic nerve, which connects the eye to the brain, becomes damaged — often due to high pressure inside the eye. It can lead to gradual vision loss if not treated.",
-    keratitis: "Keratitis is an inflammation of the cornea, the clear dome-shaped surface at the front of the eye. It can cause eye pain, redness, blurred vision, and sensitivity to light.",
-    blepharitis: "Blepharitis is a common condition where the eyelids become inflamed, causing redness, irritation, and sometimes crusty flakes at the base of the eyelashes. It is usually chronic but manageable.",
+    conjunctivitis: "Conjunctivitis, or pink eye, is an inflammation of the clear layer over the white of the eye, causing redness and discharge.",
+    cataract: "A cataract is a clouding of the eye's natural lens, causing blurry vision and sensitivity to glare.",
+    stye: "A stye is a small, painful lump on the eyelid caused by a bacterial infection near the eyelashes.",
+    pterygium: "A pterygium is a tissue growth on the white of the eye that can slowly spread onto the cornea.",
+    glaucoma: "Glaucoma is damage to the optic nerve, often from high eye pressure, which can cause gradual vision loss.",
+    keratitis: "Keratitis is inflammation of the cornea causing eye pain, redness, and blurred vision.",
+    blepharitis: "Blepharitis is chronic inflammation of the eyelids causing redness, irritation, and crusty flakes at the lash line.",
   };
 
   const conditionKey = input.conditionName?.toLowerCase().replace(/[^a-z]/g, "") ?? "";
   const matchedKey = Object.keys(conditionExplanations).find(k => conditionKey.includes(k));
   const explanation = matchedKey ? conditionExplanations[matchedKey] : "";
 
+  const detectionLine = isNormal
+    ? `Good news — no visible signs of common external eye conditions were found. Your eye appears normal based on this screening.`
+    : `The model detected patterns consistent with ${input.conditionName ?? "an external eye condition"}${input.affectedEye ? ` in your ${input.affectedEye} eye` : ""}${input.confidence != null ? `, at ${input.confidence} percent confidence` : ""}. This is an automated estimate only.`;
+
   return [
-    `Hi, I'm Iris. I've finished reviewing your eye disease screening image. Let me walk you through what was found.`,
-    isNormal
-      ? `Good news — the model found no visible signs of common external eye conditions in the submitted image. Your eye appears normal based on this screening.`
-      : `The model detected patterns potentially consistent with ${input.conditionName ?? "an external eye condition"}${input.affectedEye ? ` in your ${input.affectedEye} eye` : ""}. ${input.confidence != null ? `The estimated confidence is ${input.confidence} percent.` : ""} This is an automated estimate only and has not been reviewed by a medical professional.`,
-    !isNormal && explanation
-      ? `To explain what ${input.conditionName} is in simple terms — ${explanation}`
-      : "",
+    `Hi, I'm Iris. I've reviewed your eye disease screening. Here's what was found.`,
+    detectionLine,
+    !isNormal && explanation ? explanation : "",
     report.summary,
-    `It's important to note that this tool only covers visible external eye conditions. It cannot assess internal structures, eye pressure, retinal health, or refractive errors.`,
-    `${report.recommendation} This screening is not a substitute for a professional eye exam. Please consult a licensed eye care professional for a full evaluation.`,
+    report.recommendation,
+    `Remember, this tool cannot assess internal structures or eye pressure. Please consult a licensed eye care professional for a full evaluation.`,
   ].filter(Boolean);
 }
 
@@ -221,15 +222,46 @@ function useElevenLabsNarration() {
 function NarrationBar({ lines, lineIdx, playing, loading, onStop }: {
   lines: string[]; lineIdx: number; playing: boolean; loading: boolean; onStop: () => void;
 }) {
-  if (!playing && lineIdx === -1) return null;
+  const isActive = playing || lineIdx !== -1;
+  type AnimState = "hidden" | "entering" | "visible" | "leaving";
+  const [animState, setAnimState] = useState<AnimState>("hidden");
+
+  useEffect(() => {
+    if (isActive) {
+      if (animState === "hidden" || animState === "leaving") {
+        setAnimState("entering");
+        const t = setTimeout(() => setAnimState("visible"), 400);
+        return () => clearTimeout(t);
+      }
+    } else {
+      if (animState === "entering" || animState === "visible") {
+        setAnimState("leaving");
+        const t = setTimeout(() => setAnimState("hidden"), 400);
+        return () => clearTimeout(t);
+      }
+    }
+  }, [isActive]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  if (animState === "hidden") return null;
+
+  const animation =
+    animState === "entering" ? "narBarUp 0.38s cubic-bezier(0.2,0,0,1) forwards" :
+    animState === "leaving"  ? "narBarDown 0.38s cubic-bezier(0.4,0,0.6,1) forwards" :
+    "none";
+
   return (
     <div style={{
       position: "fixed", bottom: 0, left: 0, right: 0, zIndex: 100,
       background: "#ffffff", borderTop: `2px solid ${C.brand}`,
       boxShadow: "0 -4px 20px rgba(13,27,46,0.08)",
       padding: "14px 60px 20px",
+      animation,
     }}>
-      <style>{`@keyframes voicePulse { from { height: 4px; } to { height: 20px; } }`}</style>
+      <style>{`
+        @keyframes voicePulse { from { height: 4px; } to { height: 20px; } }
+        @keyframes narBarUp { from { transform: translateY(100%); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+        @keyframes narBarDown { from { transform: translateY(0); opacity: 1; } to { transform: translateY(100%); opacity: 0; } }
+      `}</style>
       <div style={{ display: "flex", alignItems: "flex-start", gap: 12, maxWidth: 860, margin: "0 auto" }}>
         <div style={{ display: "flex", gap: 3, alignItems: "center", paddingTop: 2, flexShrink: 0 }}>
           {[0, 1, 2, 3].map(i => (
@@ -270,13 +302,21 @@ function NarrationBar({ lines, lineIdx, playing, loading, onStop }: {
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
 export default function DiseaseReportPage() {
+  const router = useRouter();
   const [input, setInput] = useState<DetectionInput | null>(null);
   const [report, setReport] = useState<DetectionReport | null>(null);
   const [pageLoading, setPageLoading] = useState(true);
   const [narrationLines, setNarrationLines] = useState<string[]>([]);
   const [showNarrationPrompt, setShowNarrationPrompt] = useState(false);
+  const [pageExiting, setPageExiting] = useState(false);
   const { lineIdx, playing, loading: ttsLoading, start, stop, replay } = useElevenLabsNarration();
   const hasStarted = useRef(false);
+
+  const handleBack = () => {
+    stop();
+    setPageExiting(true);
+    setTimeout(() => router.push("/"), 380);
+  };
 
   useEffect(() => {
     try {
@@ -339,10 +379,12 @@ export default function DiseaseReportPage() {
         @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Mono:wght@400;500&family=Instrument+Serif:ital@0;1&family=DM+Sans:wght@300;400;500;600&display=swap');
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body { background: #f0f5fb; font-family: 'DM Sans', sans-serif; }
-        @keyframes fadeUp { from { opacity:0; transform:translateY(12px); } to { opacity:1; transform:translateY(0); } }
+        @keyframes fadeUp   { from { opacity:0; transform:translateY(12px); } to { opacity:1; transform:translateY(0); } }
+        @keyframes fadeDown { from { opacity:1; transform:translateY(0); }   to { opacity:0; transform:translateY(12px); } }
         @keyframes voicePulse { from { height: 4px; } to { height: 20px; } }
         @keyframes promptFadeIn { from { opacity:0; transform:scale(0.96); } to { opacity:1; transform:scale(1); } }
-        .fade-up { animation: fadeUp 0.5s ease both; }
+        .fade-up   { animation: fadeUp  0.5s ease both; }
+        .page-exit { animation: fadeDown 0.36s ease forwards; }
         .report-header { padding: 28px 60px; }
         .report-body { padding: 48px 60px; max-width: 860px; margin: 0 auto; display: flex; flex-direction: column; gap: 32px; }
         .report-footer { padding: 36px 60px; }
@@ -353,7 +395,7 @@ export default function DiseaseReportPage() {
         }
       `}</style>
 
-      <div style={{ background: "#f0f5fb", minHeight: "100vh", color: "#0d1b2e", paddingBottom: (playing || ttsLoading) ? 90 : 0 }}>
+      <div className={pageExiting ? "page-exit" : ""} style={{ background: "#f0f5fb", minHeight: "100vh", color: "#0d1b2e", paddingBottom: (playing || ttsLoading) ? 90 : 0 }}>
 
         {/* ── Narration prompt modal ── */}
         {showNarrationPrompt && (
@@ -418,6 +460,20 @@ export default function DiseaseReportPage() {
           <div style={{ position: "absolute", right: 40, top: -10, fontFamily: "'Bebas Neue'", fontSize: 200, color: "rgba(255,255,255,0.03)", lineHeight: 1, userSelect: "none" }}>IRIS</div>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 16 }}>
             <div>
+              <button onClick={handleBack} style={{
+                display: "inline-flex", alignItems: "center", gap: 6,
+                background: "none", border: "none", cursor: "pointer",
+                color: "rgba(255,255,255,0.45)", fontFamily: "'DM Mono'", fontSize: 11, letterSpacing: 1,
+                padding: "0 0 12px 0", transition: "color 0.18s",
+              }}
+                onMouseEnter={e => (e.currentTarget.style.color = "rgba(255,255,255,0.85)")}
+                onMouseLeave={e => (e.currentTarget.style.color = "rgba(255,255,255,0.45)")}
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="15 18 9 12 15 6"/>
+                </svg>
+                HOME
+              </button>
               <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={C.brand} strokeWidth="1.5">
                   <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" />
@@ -575,9 +631,6 @@ export default function DiseaseReportPage() {
               <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
                 <button style={{ padding: "13px 26px", borderRadius: 12, border: "none", cursor: "pointer", background: `linear-gradient(135deg, ${C.brand}, #007a87)`, color: "#fff", fontFamily: "'Bebas Neue'", fontSize: 17, letterSpacing: 2, whiteSpace: "nowrap" }}>
                   Find Eye Doctor
-                </button>
-                <button style={{ padding: "13px 26px", borderRadius: 12, cursor: "pointer", background: "transparent", border: "1px solid #ccd8ee", color: "#0d1b2e", fontFamily: "'DM Mono'", fontSize: 12, whiteSpace: "nowrap" }}>
-                  View Screening Report
                 </button>
               </div>
             </div>
