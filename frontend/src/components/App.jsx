@@ -9,8 +9,6 @@ import LoginPanelOverlay from "./LoginPanelOverlay.jsx";
 import SignupPanelOverlay from "./SignupPanelOverlay.jsx";
 import DoctorModal from "./DoctorModal.jsx";
 
-const logo = "/logo.png";
-const utd = "/utd.png";
 
 const featureCards = [
   {
@@ -158,8 +156,12 @@ export default function App() {
       const storedUser = sessionStorage.getItem("user");
       if (storedUser) setUser(JSON.parse(storedUser));
 
-      // Skip intro animation on back-navigation
-      if (sessionStorage.getItem("irisIntroSeen")) {
+      // Skip intro animation on back-navigation, but always show on reload
+      const navEntry = performance.getEntriesByType("navigation")[0];
+      const isReload = navEntry && navEntry.type === "reload";
+      if (isReload) {
+        sessionStorage.removeItem("irisIntroSeen");
+      } else if (sessionStorage.getItem("irisIntroSeen")) {
         setClicked(true);
       }
 
@@ -202,26 +204,40 @@ export default function App() {
           left: 0,
           right: 0,
           zIndex: 200,
-          padding: "14px 36px",
+          padding: "18px 52px",
           display: "flex",
           justifyContent: "space-between",
           alignItems: "center",
-          background: "rgba(8,14,26,0.72)",
-          backdropFilter: "blur(16px)",
-          WebkitBackdropFilter: "blur(16px)",
-          borderBottom: "1px solid rgba(255,255,255,0.07)",
+          background: "rgba(13,21,38,0.96)",
+          backdropFilter: "blur(20px)",
+          WebkitBackdropFilter: "blur(20px)",
+          borderBottom: "1px solid #1e2d45",
+          overflow: "hidden",
         }}
       >
+        {/* Subtle IRIS watermark */}
+        <div style={{ position: "absolute", right: 40, top: "50%", transform: "translateY(-50%)", fontFamily: "'Bebas Neue'", fontSize: 120, color: "rgba(255,255,255,0.025)", lineHeight: 1, userSelect: "none", pointerEvents: "none", letterSpacing: 10 }}>IRIS</div>
+
         {/* Brand */}
-        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          <div style={{ width: 34, height: 34, borderRadius: "50%", background: "rgba(0,196,212,0.15)", border: "1px solid rgba(0,196,212,0.35)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#00c4d4" strokeWidth="1.5">
-              <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>
+        <div style={{ display: "flex", alignItems: "center", gap: 14, position: "relative" }}>
+          <div style={{ width: 42, height: 42, borderRadius: "50%", background: "rgba(0,196,212,0.12)", border: "1px solid rgba(0,196,212,0.35)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+              <circle cx="12" cy="12" r="1.8" fill="#00c4d4"/>
+              <line x1="12" y1="2"    x2="12" y2="6.5"  stroke="#00c4d4" strokeWidth="1.6" strokeLinecap="round"/>
+              <line x1="12" y1="17.5" x2="12" y2="22"   stroke="#00c4d4" strokeWidth="1.6" strokeLinecap="round"/>
+              <line x1="2"  y1="12"   x2="6.5" y2="12"  stroke="#00c4d4" strokeWidth="1.6" strokeLinecap="round"/>
+              <line x1="17.5" y1="12" x2="22"  y2="12"  stroke="#00c4d4" strokeWidth="1.6" strokeLinecap="round"/>
+              <line x1="5.5"  y1="5.5"  x2="8.4"  y2="8.4"  stroke="#00c4d4" strokeWidth="1.1" strokeLinecap="round" strokeOpacity="0.65"/>
+              <line x1="15.6" y1="15.6" x2="18.5" y2="18.5" stroke="#00c4d4" strokeWidth="1.1" strokeLinecap="round" strokeOpacity="0.65"/>
+              <line x1="18.5" y1="5.5"  x2="15.6" y2="8.4"  stroke="#00c4d4" strokeWidth="1.1" strokeLinecap="round" strokeOpacity="0.65"/>
+              <line x1="8.4"  y1="15.6" x2="5.5"  y2="18.5" stroke="#00c4d4" strokeWidth="1.1" strokeLinecap="round" strokeOpacity="0.65"/>
             </svg>
           </div>
           <div>
-            <div style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 22, letterSpacing: 5, color: "#ffffff", lineHeight: 1 }}>IRIS</div>
-            <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 8, color: "rgba(255,255,255,0.35)", letterSpacing: 2, lineHeight: 1, marginTop: 2 }}>EYE HEALTH PLATFORM</div>
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <span style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 26, letterSpacing: 5, color: "#ffffff", lineHeight: 1 }}>IRIS</span>
+              <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, color: "rgba(255,255,255,0.4)", letterSpacing: 2, lineHeight: 1 }}>EYE HEALTH PLATFORM</span>
+            </div>
           </div>
         </div>
 
@@ -346,29 +362,14 @@ export default function App() {
             style={{ position: "fixed", inset: 0, zIndex: 50 }}
           >
             <Starsfield
-              starCount={150}
+              starCount={250}
               speed={0.2}
               trail={0.3}
-              twinkle={0.3}
-              starSize={3}
+              twinkle={0.5}
+              starSize={2.5}
               bgColor="#000000"
               starColor="#ffffff"
-              starImage={logo}
-              preserveImageColors
             />
-            <div style={{ position: "absolute", inset: 0 }}>
-              <Starsfield
-                starCount={150}
-                speed={0.2}
-                trail={0.3}
-                twinkle={0.3}
-                starSize={3}
-                bgColor="rgba(0,0,0,0)"
-                starColor="#ffffff"
-                starImage={utd}
-                preserveImageColors
-              />
-            </div>
 
             <div
               style={{

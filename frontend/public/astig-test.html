@@ -417,7 +417,7 @@
     <div class="btn-row" style="margin-top:10px;">
       <button class="btn btn-green" id="btn-other-eye">Test Other Eye →</button>
       <button class="btn btn-gray"  id="btn-restart">Restart</button>
-      <button class="btn btn-blue"  id="btn-export">Export JSON</button>
+      <button class="btn btn-blue"  id="btn-export">View Report →</button>
     </div>
   </div>
 
@@ -1413,11 +1413,9 @@ D('btn-restart').onclick = () => {
   goToMonocularSetup();
 };
 D('btn-export').onclick = () => {
-  const blob = new Blob([JSON.stringify(session, null, 2)], { type: 'application/json' });
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = `astig_${Date.now()}.json`;
-  a.click();
+  try { localStorage.setItem('irisExamResults', JSON.stringify(session.eyes)); } catch(_) {}
+  try { sessionStorage.setItem('irisIntroSeen', '1'); } catch(_) {}
+  window.top.location.href = '/report/screening';
 };
 
 // ─── Render loop ─────────────────────────────────────────────────────────────
